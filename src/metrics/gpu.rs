@@ -55,15 +55,15 @@ impl GpuMetrics {
         };
 
         self.device_utilization =
-            Self::extract_number(&output, "\"Device Utilization %\" = ").unwrap_or(0) as f64;
+            Self::extract_number(&output, "\"Device Utilization %\"=").unwrap_or(0) as f64;
         self.renderer_utilization =
-            Self::extract_number(&output, "\"Renderer Utilization %\" = ").unwrap_or(0) as f64;
+            Self::extract_number(&output, "\"Renderer Utilization %\"=").unwrap_or(0) as f64;
         self.tiler_utilization =
-            Self::extract_number(&output, "\"Tiler Utilization %\" = ").unwrap_or(0) as f64;
+            Self::extract_number(&output, "\"Tiler Utilization %\"=").unwrap_or(0) as f64;
         self.in_use_memory =
-            Self::extract_number::<u64>(&output, "\"In use system memory\" = ").unwrap_or(0);
+            Self::extract_number::<u64>(&output, "\"In use system memory\"=").unwrap_or(0);
         self.alloc_memory =
-            Self::extract_number::<u64>(&output, "\"Alloc system memory\" = ").unwrap_or(0);
+            Self::extract_number::<u64>(&output, "\"Alloc system memory\"=").unwrap_or(0);
 
         self.utilization_history.push(self.device_utilization);
     }
