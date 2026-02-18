@@ -12,7 +12,9 @@ use memory::MemoryMetrics;
 use network::NetworkMetrics;
 use process::ProcessMetrics;
 use temperature::TemperatureMetrics;
-use sysinfo::{Components, Disks, Networks, System};
+use sysinfo::{Components, Disks, Networks, ProcessesToUpdate, System};
+
+use crate::ui::tabs::Tab;
 
 pub struct MetricsCollector {
     sys: System,
@@ -55,18 +57,38 @@ impl MetricsCollector {
         }
     }
 
-    pub fn refresh(&mut self) {
-        self.sys.refresh_all();
-        self.disks.refresh(true);
-        self.networks.refresh(true);
-        self.components.refresh(true);
-
+    pub fn refresh(&mut self, active_tab: Tab) {
+        // Always refresh CPU and memory (cheap)
+        self.sys.refresh_cpu_usage();
+        self.sys.refresh_memory();
         self.cpu.update(&self.sys);
         self.memory.update(&self.sys);
-        self.disk.update(&self.disks);
-        self.network.update(&self.networks);
-        self.processes.update(&self.sys);
-        self.temperature.update(&self.components);
+
+        // Only refresh expensive subsystems when their tab is visible
+        let needs_processes = matches!(active_tab, Tab::Dashboard | Tab::Processes);
+        let needs_disk = matches!(active_tab, Tab::Dashboard | Tab::Disk);
+        let needs_network = matches!(active_tab, Tab::Dashboard | Tab::Network);
+        let needs_temps = matches!(active_tab, Tab::Temperatures);
+
+        if needs_processes {
+            self.sys.refresh_processes(ProcessesToUpdate::All, true);
+            self.processes.update(&self.sys);
+        }
+
+        if needs_disk {
+            self.disks.refresh(true);
+            self.disk.update(&self.disks);
+        }
+
+        if needs_network {
+            self.networks.refresh(true);
+            self.network.update(&self.networks);
+        }
+
+        if needs_temps {
+            self.components.refresh(true);
+            self.temperature.update(&self.components);
+        }
     }
 
     pub fn uptime(&self) -> u64 {

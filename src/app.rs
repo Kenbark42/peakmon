@@ -45,8 +45,8 @@ impl App {
         let mut last_refresh = Instant::now();
         let poll_timeout = Duration::from_millis(250);
 
-        // Initial metrics refresh
-        self.metrics.refresh();
+        // Initial metrics refresh — refresh all subsystems
+        self.metrics.refresh(Tab::Dashboard);
 
         while self.running {
             // Render
@@ -61,7 +61,7 @@ impl App {
 
             // Periodic refresh
             if last_refresh.elapsed() >= self.refresh_rate {
-                self.metrics.refresh();
+                self.metrics.refresh(self.current_tab);
                 self.log_stream.poll();
                 last_refresh = Instant::now();
             }

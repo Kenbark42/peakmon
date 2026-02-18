@@ -1,11 +1,12 @@
 use super::{LogEntry, LogLevel};
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 
 pub struct LogStream {
-    pub entries: Vec<LogEntry>,
+    pub entries: VecDeque<LogEntry>,
     pub max_entries: usize,
     pub auto_scroll: bool,
     pub level_filter: Option<LogLevel>,
@@ -55,7 +56,7 @@ impl LogStream {
         });
 
         Self {
-            entries: Vec::new(),
+            entries: VecDeque::new(),
             max_entries,
             auto_scroll: true,
             level_filter: None,
@@ -67,9 +68,9 @@ impl LogStream {
 
     pub fn poll(&mut self) {
         while let Ok(entry) = self.receiver.try_recv() {
-            self.entries.push(entry);
+            self.entries.push_back(entry);
             if self.entries.len() > self.max_entries {
-                self.entries.remove(0);
+                self.entries.pop_front();
             }
         }
     }
