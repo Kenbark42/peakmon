@@ -5,13 +5,7 @@ use ratatui::Frame;
 
 use crate::ui::theme;
 
-pub fn render(
-    frame: &mut Frame,
-    area: Rect,
-    title: &str,
-    percent: f64,
-    label: &str,
-) {
+pub fn render(frame: &mut Frame, area: Rect, title: &str, percent: f64, label: &str) {
     let clamped = percent.clamp(0.0, 100.0);
 
     let block = Block::default()

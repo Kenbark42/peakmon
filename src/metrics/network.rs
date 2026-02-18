@@ -1,4 +1,5 @@
 use super::history::History;
+use std::process::Command;
 use sysinfo::Networks;
 
 pub struct InterfaceMetrics {
@@ -11,12 +12,27 @@ pub struct InterfaceMetrics {
     prev_tx: u64,
 }
 
+pub struct ConnectionCounts {
+    pub established: u32,
+    pub listen: u32,
+    pub time_wait: u32,
+    pub close_wait: u32,
+    pub other: u32,
+}
+
+impl ConnectionCounts {
+    pub fn total(&self) -> u32 {
+        self.established + self.listen + self.time_wait + self.close_wait + self.other
+    }
+}
+
 pub struct NetworkMetrics {
     pub interfaces: Vec<InterfaceMetrics>,
     pub total_rx_rate: f64,
     pub total_tx_rate: f64,
     pub total_rx_history: History,
     pub total_tx_history: History,
+    pub connections: ConnectionCounts,
 }
 
 impl NetworkMetrics {
@@ -27,6 +43,13 @@ impl NetworkMetrics {
             total_tx_rate: 0.0,
             total_rx_history: History::new(),
             total_tx_history: History::new(),
+            connections: ConnectionCounts {
+                established: 0,
+                listen: 0,
+                time_wait: 0,
+                close_wait: 0,
+                other: 0,
+            },
         }
     }
 
@@ -73,5 +96,39 @@ impl NetworkMetrics {
         self.total_tx_rate = total_tx;
         self.total_rx_history.push(total_rx);
         self.total_tx_history.push(total_tx);
+
+        self.refresh_connections();
+    }
+
+    fn refresh_connections(&mut self) {
+        let output = match Command::new("netstat").args(["-n", "-p", "tcp"]).output() {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
+            Err(_) => return,
+        };
+
+        let mut established = 0u32;
+        let mut listen = 0u32;
+        let mut time_wait = 0u32;
+        let mut close_wait = 0u32;
+        let mut other = 0u32;
+
+        for line in output.lines().skip(2) {
+            let state = line.split_whitespace().last().unwrap_or("");
+            match state {
+                "ESTABLISHED" => established += 1,
+                "LISTEN" => listen += 1,
+                "TIME_WAIT" => time_wait += 1,
+                "CLOSE_WAIT" => close_wait += 1,
+                _ => other += 1,
+            }
+        }
+
+        self.connections = ConnectionCounts {
+            established,
+            listen,
+            time_wait,
+            close_wait,
+            other,
+        };
     }
 }

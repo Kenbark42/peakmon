@@ -78,6 +78,8 @@ pub fn render(frame: &mut Frame, area: Rect, log_stream: &LogStream, scroll_offs
         })
         .collect();
 
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
 }

@@ -27,7 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(8),   // Sensor bar chart
+            Constraint::Min(8),    // Sensor bar chart
             Constraint::Length(7), // Selected sensor sparkline
         ])
         .split(area);

@@ -13,7 +13,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
             Constraint::Length(3), // RAM gauge
             Constraint::Length(7), // RAM sparkline
             Constraint::Length(3), // Swap gauge
-            Constraint::Min(7),   // Swap sparkline
+            Constraint::Min(7),    // Swap sparkline
         ])
         .split(area);
 
@@ -24,7 +24,13 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         format_bytes(metrics.memory.total_ram),
         format_percent(metrics.memory.ram_percent),
     );
-    metric_gauge::render(frame, chunks[0], "RAM", metrics.memory.ram_percent, &ram_label);
+    metric_gauge::render(
+        frame,
+        chunks[0],
+        "RAM",
+        metrics.memory.ram_percent,
+        &ram_label,
+    );
 
     // RAM history sparkline
     let ram_data = metrics.memory.ram_history.as_u64_vec(area.width as usize);

@@ -11,7 +11,7 @@ pub fn compute_layout(area: Rect) -> AppLayout {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2), // header + tab bar
-            Constraint::Min(10),  // body
+            Constraint::Min(10),   // body
             Constraint::Length(1), // footer
         ])
         .split(area);

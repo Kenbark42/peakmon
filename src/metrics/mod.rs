@@ -1,18 +1,22 @@
+pub mod ai;
 pub mod cpu;
 pub mod disk;
+pub mod gpu;
 pub mod history;
 pub mod memory;
 pub mod network;
 pub mod process;
 pub mod temperature;
 
+use ai::AiMetrics;
 use cpu::CpuMetrics;
 use disk::DiskMetrics;
+use gpu::GpuMetrics;
 use memory::MemoryMetrics;
 use network::NetworkMetrics;
 use process::ProcessMetrics;
-use temperature::TemperatureMetrics;
 use sysinfo::{Components, Disks, Networks, ProcessesToUpdate, System};
+use temperature::TemperatureMetrics;
 
 use crate::ui::tabs::Tab;
 
@@ -27,6 +31,8 @@ pub struct MetricsCollector {
     pub network: NetworkMetrics,
     pub processes: ProcessMetrics,
     pub temperature: TemperatureMetrics,
+    pub gpu: GpuMetrics,
+    pub ai: AiMetrics,
     pub boot_time: u64,
 }
 
@@ -53,6 +59,8 @@ impl MetricsCollector {
             network: NetworkMetrics::new(),
             processes: ProcessMetrics::new(),
             temperature: TemperatureMetrics::new(),
+            gpu: GpuMetrics::new(),
+            ai: AiMetrics::new(),
             boot_time,
         }
     }
@@ -65,10 +73,12 @@ impl MetricsCollector {
         self.memory.update(&self.sys);
 
         // Only refresh expensive subsystems when their tab is visible
-        let needs_processes = matches!(active_tab, Tab::Dashboard | Tab::Processes);
+        let needs_processes = matches!(active_tab, Tab::Dashboard | Tab::Processes | Tab::Ai);
         let needs_disk = matches!(active_tab, Tab::Dashboard | Tab::Disk);
         let needs_network = matches!(active_tab, Tab::Dashboard | Tab::Network);
         let needs_temps = matches!(active_tab, Tab::Temperatures);
+        let needs_gpu = matches!(active_tab, Tab::Dashboard | Tab::Gpu);
+        let needs_ai = matches!(active_tab, Tab::Ai);
 
         if needs_processes {
             self.sys.refresh_processes(ProcessesToUpdate::All, true);
@@ -88,6 +98,14 @@ impl MetricsCollector {
         if needs_temps {
             self.components.refresh(true);
             self.temperature.update(&self.components);
+        }
+
+        if needs_gpu {
+            self.gpu.update();
+        }
+
+        if needs_ai {
+            self.ai.update(&self.processes.processes);
         }
     }
 

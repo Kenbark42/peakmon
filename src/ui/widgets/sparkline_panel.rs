@@ -16,10 +16,7 @@ pub fn render(
     annotation: &str,
 ) {
     let block = Block::default()
-        .title(Line::styled(
-            format!(" {title} "),
-            theme::title_style(),
-        ))
+        .title(Line::styled(format!(" {title} "), theme::title_style()))
         .title_bottom(Line::styled(
             format!(" {annotation} "),
             Style::default().fg(color),

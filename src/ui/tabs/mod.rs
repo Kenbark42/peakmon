@@ -2,6 +2,8 @@
 pub enum Tab {
     Dashboard,
     Cpu,
+    Gpu,
+    Ai,
     Memory,
     Disk,
     Network,
@@ -11,9 +13,11 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Dashboard,
         Tab::Cpu,
+        Tab::Gpu,
+        Tab::Ai,
         Tab::Memory,
         Tab::Disk,
         Tab::Network,
@@ -26,6 +30,8 @@ impl Tab {
         match self {
             Tab::Dashboard => "Dashboard",
             Tab::Cpu => "CPU",
+            Tab::Gpu => "GPU",
+            Tab::Ai => "AI",
             Tab::Memory => "Memory",
             Tab::Disk => "Disk",
             Tab::Network => "Network",
@@ -39,12 +45,14 @@ impl Tab {
         match self {
             Tab::Dashboard => 0,
             Tab::Cpu => 1,
-            Tab::Memory => 2,
-            Tab::Disk => 3,
-            Tab::Network => 4,
-            Tab::Processes => 5,
-            Tab::Logs => 6,
-            Tab::Temperatures => 7,
+            Tab::Gpu => 2,
+            Tab::Ai => 3,
+            Tab::Memory => 4,
+            Tab::Disk => 5,
+            Tab::Network => 6,
+            Tab::Processes => 7,
+            Tab::Logs => 8,
+            Tab::Temperatures => 9,
         }
     }
 
@@ -67,11 +75,13 @@ impl Tab {
     }
 }
 
-pub mod dashboard;
+pub mod ai_detail;
 pub mod cpu_detail;
-pub mod memory_detail;
+pub mod dashboard;
 pub mod disk_detail;
+pub mod gpu_detail;
+pub mod logs;
+pub mod memory_detail;
 pub mod network_detail;
 pub mod processes;
-pub mod logs;
 pub mod temperatures;

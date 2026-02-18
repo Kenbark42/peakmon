@@ -1,4 +1,5 @@
 use super::history::History;
+use std::collections::HashMap;
 use sysinfo::Disks;
 
 pub struct DiskInfo {
@@ -7,6 +8,8 @@ pub struct DiskInfo {
     pub total_space: u64,
     pub available_space: u64,
     pub used_percent: f64,
+    pub read_rate: f64,
+    pub write_rate: f64,
 }
 
 pub struct DiskIoSnapshot {
@@ -21,6 +24,7 @@ pub struct DiskMetrics {
     pub read_history: History,
     pub write_history: History,
     prev_snapshot: Option<DiskIoSnapshot>,
+    prev_per_disk: HashMap<String, DiskIoSnapshot>,
 }
 
 impl DiskMetrics {
@@ -32,6 +36,7 @@ impl DiskMetrics {
             read_history: History::new(),
             write_history: History::new(),
             prev_snapshot: None,
+            prev_per_disk: HashMap::new(),
         }
     }
 
@@ -39,6 +44,7 @@ impl DiskMetrics {
         self.disks.clear();
         let mut total_read: u64 = 0;
         let mut total_written: u64 = 0;
+        let mut new_per_disk = HashMap::new();
 
         for disk in sysinfo_disks.list() {
             let total = disk.total_space();
@@ -58,21 +64,45 @@ impl DiskMetrics {
                 continue;
             }
 
-            self.disks.push(DiskInfo {
-                name: if name.is_empty() {
-                    mount.clone()
+            let disk_read = disk.usage().read_bytes;
+            let disk_written = disk.usage().written_bytes;
+
+            let display_name = if name.is_empty() { mount.clone() } else { name };
+
+            // Compute per-disk rates
+            let (per_read_rate, per_write_rate) =
+                if let Some(prev) = self.prev_per_disk.get(&display_name) {
+                    (
+                        disk_read.saturating_sub(prev.read_bytes) as f64,
+                        disk_written.saturating_sub(prev.written_bytes) as f64,
+                    )
                 } else {
-                    name
+                    (0.0, 0.0)
+                };
+
+            new_per_disk.insert(
+                display_name.clone(),
+                DiskIoSnapshot {
+                    read_bytes: disk_read,
+                    written_bytes: disk_written,
                 },
+            );
+
+            self.disks.push(DiskInfo {
+                name: display_name,
                 mount_point: mount,
                 total_space: total,
                 available_space: available,
                 used_percent: used_pct,
+                read_rate: per_read_rate,
+                write_rate: per_write_rate,
             });
 
-            total_read = total_read.wrapping_add(disk.usage().read_bytes);
-            total_written = total_written.wrapping_add(disk.usage().written_bytes);
+            total_read = total_read.wrapping_add(disk_read);
+            total_written = total_written.wrapping_add(disk_written);
         }
+
+        self.prev_per_disk = new_per_disk;
 
         let current = DiskIoSnapshot {
             read_bytes: total_read,

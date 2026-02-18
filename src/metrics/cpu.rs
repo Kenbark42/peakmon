@@ -7,6 +7,7 @@ pub struct CpuMetrics {
     pub aggregate_history: History,
     pub per_core_history: Vec<History>,
     pub core_count: usize,
+    pub load_avg: [f64; 3],
 }
 
 impl CpuMetrics {
@@ -17,6 +18,7 @@ impl CpuMetrics {
             aggregate_history: History::new(),
             per_core_history: (0..core_count).map(|_| History::new()).collect(),
             core_count,
+            load_avg: [0.0; 3],
         }
     }
 
@@ -48,5 +50,12 @@ impl CpuMetrics {
             self.per_core_usage.iter().sum::<f64>() / self.per_core_usage.len() as f64
         };
         self.aggregate_history.push(self.aggregate_usage);
+
+        // Load average
+        let mut loadavg = [0.0_f64; 3];
+        unsafe {
+            libc::getloadavg(loadavg.as_mut_ptr(), 3);
+        }
+        self.load_avg = loadavg;
     }
 }

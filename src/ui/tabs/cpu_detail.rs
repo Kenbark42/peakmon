@@ -14,12 +14,15 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(7), // Aggregate sparkline
-            Constraint::Min(8),   // Per-core bar chart
+            Constraint::Min(8),    // Per-core bar chart
         ])
         .split(area);
 
     // Aggregate CPU sparkline
-    let cpu_data = metrics.cpu.aggregate_history.as_u64_vec(area.width as usize);
+    let cpu_data = metrics
+        .cpu
+        .aggregate_history
+        .as_u64_vec(area.width as usize);
     let cpu_label = format_percent(metrics.cpu.aggregate_usage);
     sparkline_panel::render(
         frame,
@@ -39,12 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         .iter()
         .enumerate()
         .map(|(i, label)| {
-            let usage = metrics
-                .cpu
-                .per_core_usage
-                .get(i)
-                .copied()
-                .unwrap_or(0.0);
+            let usage = metrics.cpu.per_core_usage.get(i).copied().unwrap_or(0.0);
             (label.as_str(), usage as u64)
         })
         .collect();

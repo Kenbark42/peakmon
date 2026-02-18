@@ -12,16 +12,19 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),  // CPU sparkline
-            Constraint::Length(3),  // Memory gauge
-            Constraint::Length(3),  // Swap gauge
+            Constraint::Length(5), // CPU sparkline
+            Constraint::Length(3), // Memory gauge
+            Constraint::Length(3), // Swap gauge
             Constraint::Min(6),    // Top processes table
             Constraint::Length(3), // Network summary
         ])
         .split(area);
 
     // CPU sparkline
-    let cpu_data = metrics.cpu.aggregate_history.as_u64_vec(area.width as usize);
+    let cpu_data = metrics
+        .cpu
+        .aggregate_history
+        .as_u64_vec(area.width as usize);
     let cpu_label = format_percent(metrics.cpu.aggregate_usage);
     sparkline_panel::render(
         frame,

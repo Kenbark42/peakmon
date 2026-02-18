@@ -20,7 +20,10 @@ pub fn title_style() -> Style {
 }
 
 pub fn active_tab_style() -> Style {
-    Style::default().fg(BASE).bg(BLUE).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(BASE)
+        .bg(BLUE)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn inactive_tab_style() -> Style {
@@ -57,7 +60,7 @@ pub fn gauge_style(percent: f64) -> Style {
     } else {
         GREEN
     };
-    Style::default().fg(color)
+    Style::default().fg(color).bg(BASE)
 }
 
 pub fn border_style() -> Style {
@@ -68,3 +71,14 @@ pub fn highlight_style() -> Style {
     Style::default().fg(BASE).bg(BLUE)
 }
 
+pub fn process_state_color(state: crate::metrics::process::ProcessState) -> Color {
+    use crate::metrics::process::ProcessState;
+    match state {
+        ProcessState::Run => GREEN,
+        ProcessState::Sleep => SUBTEXT,
+        ProcessState::Idle => SURFACE1,
+        ProcessState::Zombie => RED,
+        ProcessState::Stop => YELLOW,
+        ProcessState::Unknown => SURFACE1,
+    }
+}
