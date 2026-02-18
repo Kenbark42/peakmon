@@ -1,9 +1,9 @@
 class Peakmon < Formula
   desc "Real-time terminal system monitor for macOS"
   homepage "https://github.com/Kenbark42/peakmon"
-  version "0.2.0"
+  version "0.3.0"
   url "https://github.com/Kenbark42/peakmon/releases/download/v#{version}/peakmon-v#{version}-aarch64-apple-darwin.tar.gz"
-  sha256 "10bf42439983b5e2aea7a95854549a45a8701e70265a2f66d635ec4d34be046b"
+  sha256 "fb85215bf23eaa0534e273e3b3c837ece92634db4ebdd87d46c686a995e433ee"
   license "MIT"
 
   def install
