@@ -86,8 +86,6 @@ pub fn render(
                         Span::styled(" chat  ", theme::label_style()),
                         Span::styled("S", theme::key_hint_style()),
                         Span::styled(" search  ", theme::label_style()),
-                        Span::styled("P", theme::key_hint_style()),
-                        Span::styled(" pull  ", theme::label_style()),
                         Span::styled("D", theme::key_hint_style()),
                         Span::styled(" delete  ", theme::label_style()),
                         Span::styled("U", theme::key_hint_style()),

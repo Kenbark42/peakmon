@@ -11,7 +11,6 @@ use crate::ui::tabs::Tab;
 #[derive(Clone, Copy, PartialEq)]
 pub enum AiInputMode {
     Normal,
-    PullPrompt,
     ChatInput,
     SearchInput,
 }
@@ -161,32 +160,6 @@ impl App {
                     // Start new search from within results overlay
                     self.ai_input_mode = AiInputMode::SearchInput;
                     self.ai_input_buffer.clear();
-                }
-                _ => {}
-            }
-            return;
-        }
-
-        // AI pull prompt input
-        if self.ai_input_mode == AiInputMode::PullPrompt {
-            match key.code {
-                KeyCode::Esc => {
-                    self.ai_input_mode = AiInputMode::Normal;
-                    self.ai_input_buffer.clear();
-                }
-                KeyCode::Enter => {
-                    let name = self.ai_input_buffer.trim().to_string();
-                    if !name.is_empty() {
-                        self.metrics.ai.start_pull(name);
-                    }
-                    self.ai_input_mode = AiInputMode::Normal;
-                    self.ai_input_buffer.clear();
-                }
-                KeyCode::Backspace => {
-                    self.ai_input_buffer.pop();
-                }
-                KeyCode::Char(c) => {
-                    self.ai_input_buffer.push(c);
                 }
                 _ => {}
             }
@@ -466,12 +439,6 @@ impl App {
             }
 
             // AI tab keys
-            KeyCode::Char('P') if self.current_tab == Tab::Ai => {
-                if self.metrics.ai.ollama_available {
-                    self.ai_input_mode = AiInputMode::PullPrompt;
-                    self.ai_input_buffer.clear();
-                }
-            }
             KeyCode::Char('D') if self.current_tab == Tab::Ai => {
                 if let Some(name) = self.metrics.ai.selected_model_name() {
                     self.ai_confirm_delete = Some(name);

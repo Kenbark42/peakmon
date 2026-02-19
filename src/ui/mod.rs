@@ -116,28 +116,6 @@ pub fn render(frame: &mut Frame, app: &App) {
         frame.render_widget(p, popup);
     }
 
-    // AI pull prompt overlay
-    if app.ai_input_mode == AiInputMode::PullPrompt {
-        let popup = centered_rect(50, 5, area);
-        frame.render_widget(Clear, popup);
-        let display = if app.ai_input_buffer.is_empty() {
-            "e.g. llama3.2:3b".to_string()
-        } else {
-            format!("{}_", app.ai_input_buffer)
-        };
-        let text = Line::from(vec![
-            Span::styled(" Model: ", theme::label_style()),
-            Span::styled(display, theme::value_style()),
-        ]);
-        let block = Block::default()
-            .title(Line::styled(" Pull Model ", theme::title_style()))
-            .borders(Borders::ALL)
-            .border_style(theme::border_style())
-            .style(Style::default().bg(theme::BASE));
-        let p = Paragraph::new(text).block(block);
-        frame.render_widget(p, popup);
-    }
-
     // AI chat input overlay
     if app.ai_input_mode == AiInputMode::ChatInput {
         let popup = bottom_bar(area, 3);

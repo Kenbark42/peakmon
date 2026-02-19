@@ -201,16 +201,97 @@ pub enum SearchStatus {
     Error(String),
 }
 
-// Remote models response from ollama.com
-#[derive(Deserialize)]
-struct OllamaLibraryResponse {
-    models: Option<Vec<OllamaLibraryModel>>,
+/// Parse model names and descriptions from ollama.com/search HTML.
+/// Looks for `href="/library/<name>"` links followed by `<p>` descriptions.
+fn parse_search_html(html: &str) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+    let mut pos = 0;
+    let bytes = html.as_bytes();
+    let needle = b"href=\"/library/";
+
+    while pos < bytes.len() {
+        // Find next href="/library/..."
+        let Some(href_start) = find_bytes(bytes, needle, pos) else {
+            break;
+        };
+        let name_start = href_start + needle.len();
+        let Some(quote_end) = find_byte(bytes, b'"', name_start) else {
+            break;
+        };
+        let name = &html[name_start..quote_end];
+        pos = quote_end;
+
+        // Skip variant links like /library/name:tag (we only want the base model)
+        if name.contains('/') {
+            continue;
+        }
+
+        // Avoid duplicates (the page may have multiple links to the same model)
+        if results.iter().any(|r: &SearchResult| r.name == name) {
+            continue;
+        }
+
+        // Look for the next <p ...> tag after this link to get the description
+        let description = if let Some(p_start) = find_bytes(bytes, b"<p", pos) {
+            // Only use it if it's reasonably close (within 500 chars)
+            if p_start - pos < 500 {
+                if let Some(gt) = find_byte(bytes, b'>', p_start) {
+                    if let Some(p_end) = find_bytes(bytes, b"</p>", gt + 1) {
+                        let raw = &html[gt + 1..p_end];
+                        // Strip any inner HTML tags and clean up whitespace
+                        strip_html_tags(raw).trim().to_string()
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        results.push(SearchResult {
+            name: name.to_string(),
+            description,
+        });
+    }
+
+    results
 }
 
-#[derive(Deserialize)]
-struct OllamaLibraryModel {
-    name: Option<String>,
-    description: Option<String>,
+fn find_bytes(haystack: &[u8], needle: &[u8], start: usize) -> Option<usize> {
+    if needle.is_empty() || start + needle.len() > haystack.len() {
+        return None;
+    }
+    haystack[start..]
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| p + start)
+}
+
+fn find_byte(haystack: &[u8], needle: u8, start: usize) -> Option<usize> {
+    haystack[start..]
+        .iter()
+        .position(|&b| b == needle)
+        .map(|p| p + start)
+}
+
+fn strip_html_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for ch in s.chars() {
+        if ch == '<' {
+            in_tag = true;
+        } else if ch == '>' {
+            in_tag = false;
+        } else if !in_tag {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 // --- Main AI Metrics Struct ---
@@ -766,31 +847,27 @@ impl AiMetrics {
                 .timeout_read(std::time::Duration::from_secs(10))
                 .build();
 
-            match agent.get("https://ollama.com/api/tags").call() {
-                Ok(resp) => match resp.into_json::<OllamaLibraryResponse>() {
-                    Ok(lib) => {
-                        let query_lower = query.to_lowercase();
-                        let results: Vec<SearchResult> = lib
-                            .models
-                            .unwrap_or_default()
-                            .into_iter()
-                            .filter(|m| {
-                                let name = m.name.as_deref().unwrap_or("");
-                                let desc = m.description.as_deref().unwrap_or("");
-                                name.to_lowercase().contains(&query_lower)
-                                    || desc.to_lowercase().contains(&query_lower)
-                            })
-                            .map(|m| SearchResult {
-                                name: m.name.unwrap_or_default(),
-                                description: m.description.unwrap_or_default(),
-                            })
-                            .collect();
+            let encoded: String = query
+                .bytes()
+                .map(|b| match b {
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => {
+                        (b as char).to_string()
+                    }
+                    b' ' => "+".to_string(),
+                    _ => format!("%{b:02X}"),
+                })
+                .collect();
+            let url = format!("https://ollama.com/search?q={encoded}");
+
+            match agent.get(&url).call() {
+                Ok(resp) => match resp.into_string() {
+                    Ok(html) => {
+                        let results = parse_search_html(&html);
                         let _ = tx.send(SearchStatus::Results(results));
                     }
                     Err(e) => {
-                        let _ = tx.send(SearchStatus::Error(format!(
-                            "Failed to parse response: {e}"
-                        )));
+                        let _ =
+                            tx.send(SearchStatus::Error(format!("Failed to read response: {e}")));
                     }
                 },
                 Err(e) => {
