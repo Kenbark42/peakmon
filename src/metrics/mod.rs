@@ -77,7 +77,7 @@ impl MetricsCollector {
         let needs_disk = matches!(active_tab, Tab::Dashboard | Tab::Disk);
         let needs_network = matches!(active_tab, Tab::Dashboard | Tab::Network);
         let needs_temps = matches!(active_tab, Tab::Temperatures);
-        let needs_gpu = matches!(active_tab, Tab::Dashboard | Tab::Gpu);
+        let needs_gpu = matches!(active_tab, Tab::Dashboard | Tab::Gpu | Tab::Ai);
         let needs_ai = matches!(active_tab, Tab::Ai);
 
         if needs_processes {

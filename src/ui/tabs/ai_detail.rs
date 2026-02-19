@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 
 use crate::metrics::ai::{AiMetrics, ChatStatus, PullStatus};
+use crate::metrics::gpu::GpuMetrics;
 use crate::metrics::MetricsCollector;
 use crate::ui::theme;
 use crate::ui::widgets::sparkline_panel;
@@ -48,7 +49,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector, chat_sc
         render_performance(frame, chunks[idx], ai);
         idx += 1;
     }
-    render_resource_usage(frame, chunks[idx], ai, area.width);
+    render_resource_usage(frame, chunks[idx], ai, &metrics.gpu, area.width);
 }
 
 fn render_services(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
@@ -474,14 +475,23 @@ fn render_performance(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     }
 }
 
-fn render_resource_usage(frame: &mut Frame, area: Rect, ai: &AiMetrics, width: u16) {
+fn render_resource_usage(
+    frame: &mut Frame,
+    area: Rect,
+    ai: &AiMetrics,
+    gpu: &GpuMetrics,
+    width: u16,
+) {
     let annotation = format!(
-        "CPU: {}  Mem: {}",
+        "GPU: {}  GPU Mem: {} / {}  |  CPU: {}  Proc Mem: {}",
+        format_percent(gpu.device_utilization),
+        format_bytes(gpu.in_use_memory),
+        format_bytes(gpu.alloc_memory),
         format_percent(ai.aggregate_cpu),
         format_bytes(ai.aggregate_memory)
     );
 
-    let data = ai.cpu_history.as_u64_vec(width as usize);
+    let data = gpu.utilization_history.as_u64_vec(width as usize);
     sparkline_panel::render(
         frame,
         area,

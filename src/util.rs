@@ -57,3 +57,28 @@ pub fn format_uptime(secs: u64) -> String {
 pub fn format_percent(value: f64) -> String {
     format!("{:.1}%", value)
 }
+
+/// Copy text to system clipboard via `pbcopy`. Returns true on success.
+pub fn copy_to_clipboard(text: &str) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let Ok(mut child) = Command::new("pbcopy")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+
+    let Some(ref mut stdin) = child.stdin else {
+        return false;
+    };
+
+    if stdin.write_all(text.as_bytes()).is_err() {
+        return false;
+    }
+
+    child.wait().is_ok_and(|s| s.success())
+}

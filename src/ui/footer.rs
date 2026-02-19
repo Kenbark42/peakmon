@@ -2,12 +2,13 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::tabs::Tab;
 use super::theme;
 use crate::metrics::ai::{AiMetrics, ChatStatus};
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,
@@ -16,6 +17,7 @@ pub fn render(
     filter_buffer: &str,
     refresh_rate: Duration,
     ai: &AiMetrics,
+    copy_feedback: Option<Instant>,
 ) {
     let hints = if filter_mode {
         let display = if filter_buffer.is_empty() {
@@ -91,7 +93,11 @@ pub fn render(
                         Span::styled("U", theme::key_hint_style()),
                         Span::styled(" unload  ", theme::label_style()),
                         Span::styled("C", theme::key_hint_style()),
-                        Span::styled(" clear", theme::label_style()),
+                        Span::styled(" clear  ", theme::label_style()),
+                        Span::styled("y", theme::key_hint_style()),
+                        Span::styled(" copy  ", theme::label_style()),
+                        Span::styled("Y", theme::key_hint_style()),
+                        Span::styled(" copy all", theme::label_style()),
                     ]);
                 }
             }
@@ -108,6 +114,13 @@ pub fn render(
                 ]);
             }
         }
+        // Show "Copied!" feedback for 2 seconds after a copy
+        if let Some(t) = copy_feedback {
+            if t.elapsed() < Duration::from_secs(2) {
+                h.push(Span::styled("  ✓ Copied!", theme::value_style()));
+            }
+        }
+
         h
     };
 

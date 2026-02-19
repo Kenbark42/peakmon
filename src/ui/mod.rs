@@ -70,6 +70,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         &app.filter_buffer,
         app.refresh_rate,
         &app.metrics.ai,
+        app.copy_feedback,
     );
 
     // Kill confirmation overlay

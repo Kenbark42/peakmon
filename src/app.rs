@@ -33,6 +33,7 @@ pub struct App {
     pub ai_input_buffer: String,
     pub ai_confirm_delete: Option<String>,
     pub ai_chat_scroll: usize,
+    pub copy_feedback: Option<Instant>,
 }
 
 impl App {
@@ -59,6 +60,7 @@ impl App {
             ai_input_buffer: String::new(),
             ai_confirm_delete: None,
             ai_chat_scroll: 0,
+            copy_feedback: None,
         }
     }
 
@@ -87,6 +89,13 @@ impl App {
                 AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
                 AppEvent::Resize => {}
                 AppEvent::Tick => {}
+            }
+
+            // Clear copy feedback after 2 seconds
+            if let Some(t) = self.copy_feedback {
+                if t.elapsed() >= Duration::from_secs(2) {
+                    self.copy_feedback = None;
+                }
             }
 
             // Periodic refresh
@@ -472,6 +481,39 @@ impl App {
             }
             KeyCode::Esc if self.current_tab == Tab::Ai => {
                 self.metrics.ai.cancel_chat();
+            }
+            KeyCode::Char('y') if self.current_tab == Tab::Ai => {
+                if let Some(msg) = self
+                    .metrics
+                    .ai
+                    .chat_messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == "assistant" && !m.content.is_empty())
+                {
+                    if crate::util::copy_to_clipboard(&msg.content) {
+                        self.copy_feedback = Some(Instant::now());
+                    }
+                }
+            }
+            KeyCode::Char('Y') if self.current_tab == Tab::Ai => {
+                if !self.metrics.ai.chat_messages.is_empty() {
+                    let text: String = self
+                        .metrics
+                        .ai
+                        .chat_messages
+                        .iter()
+                        .filter(|m| !m.content.is_empty())
+                        .map(|m| {
+                            let label = if m.role == "user" { "You" } else { "AI" };
+                            format!("{label}: {}", m.content)
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    if crate::util::copy_to_clipboard(&text) {
+                        self.copy_feedback = Some(Instant::now());
+                    }
+                }
             }
 
             // Log keys
