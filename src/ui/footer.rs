@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use super::tabs::Tab;
 use super::theme;
+use crate::metrics::ai::{AiMetrics, ChatStatus};
 
 pub fn render(
     frame: &mut Frame,
@@ -14,6 +15,7 @@ pub fn render(
     filter_mode: bool,
     filter_buffer: &str,
     refresh_rate: Duration,
+    ai: &AiMetrics,
 ) {
     let hints = if filter_mode {
         let display = if filter_buffer.is_empty() {
@@ -71,18 +73,29 @@ pub fn render(
                 ]);
             }
             Tab::Ai => {
-                h.extend([
-                    Span::styled("j/k", theme::key_hint_style()),
-                    Span::styled(" select  ", theme::label_style()),
-                    Span::styled("P", theme::key_hint_style()),
-                    Span::styled(" pull  ", theme::label_style()),
-                    Span::styled("D", theme::key_hint_style()),
-                    Span::styled(" delete  ", theme::label_style()),
-                    Span::styled("Enter", theme::key_hint_style()),
-                    Span::styled(" load  ", theme::label_style()),
-                    Span::styled("U", theme::key_hint_style()),
-                    Span::styled(" unload", theme::label_style()),
-                ]);
+                if ai.chat_status == ChatStatus::Generating {
+                    h.extend([
+                        Span::styled("Esc", theme::key_hint_style()),
+                        Span::styled(" cancel generation", theme::label_style()),
+                    ]);
+                } else {
+                    h.extend([
+                        Span::styled("j/k", theme::key_hint_style()),
+                        Span::styled(" select  ", theme::label_style()),
+                        Span::styled("i", theme::key_hint_style()),
+                        Span::styled(" chat  ", theme::label_style()),
+                        Span::styled("S", theme::key_hint_style()),
+                        Span::styled(" search  ", theme::label_style()),
+                        Span::styled("P", theme::key_hint_style()),
+                        Span::styled(" pull  ", theme::label_style()),
+                        Span::styled("D", theme::key_hint_style()),
+                        Span::styled(" delete  ", theme::label_style()),
+                        Span::styled("U", theme::key_hint_style()),
+                        Span::styled(" unload  ", theme::label_style()),
+                        Span::styled("C", theme::key_hint_style()),
+                        Span::styled(" clear", theme::label_style()),
+                    ]);
+                }
             }
             Tab::Temperatures => {
                 h.extend([

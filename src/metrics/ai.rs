@@ -2,6 +2,7 @@ use super::history::History;
 use super::process::ProcessInfo;
 use crate::util::format_bytes;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
@@ -136,6 +137,82 @@ struct PullProgressLine {
     completed: Option<u64>,
 }
 
+// --- Chat Types ---
+
+#[derive(Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum ChatStatus {
+    Idle,
+    Generating,
+    Done,
+    Error(String),
+}
+
+#[derive(Clone)]
+pub struct ChatMetrics {
+    pub tokens_per_sec: f64,
+    pub ttft_ms: f64,
+    pub prompt_tokens: u64,
+    pub gen_tokens: u64,
+    pub total_duration_ms: f64,
+    pub load_duration_ms: f64,
+}
+
+pub enum ChatToken {
+    Token(String),
+    FirstToken(String, f64), // token text, TTFT in ms
+    Done(ChatMetrics),
+    Error(String),
+}
+
+// --- Chat streaming response types ---
+
+#[derive(Deserialize)]
+struct ChatResponseLine {
+    message: Option<ChatResponseMessage>,
+    done: Option<bool>,
+    eval_count: Option<u64>,
+    eval_duration: Option<u64>,
+    prompt_eval_count: Option<u64>,
+    total_duration: Option<u64>,
+    load_duration: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct ChatResponseMessage {
+    content: Option<String>,
+}
+
+// --- Search Types ---
+
+#[derive(Clone)]
+pub struct SearchResult {
+    pub name: String,
+    pub description: String,
+}
+
+pub enum SearchStatus {
+    Results(Vec<SearchResult>),
+    Error(String),
+}
+
+// Remote models response from ollama.com
+#[derive(Deserialize)]
+struct OllamaLibraryResponse {
+    models: Option<Vec<OllamaLibraryModel>>,
+}
+
+#[derive(Deserialize)]
+struct OllamaLibraryModel {
+    name: Option<String>,
+    description: Option<String>,
+}
+
 // --- Main AI Metrics Struct ---
 
 pub struct AiMetrics {
@@ -153,6 +230,23 @@ pub struct AiMetrics {
     pull_receiver: Option<mpsc::Receiver<PullStatus>>,
     last_api_check: Option<Instant>,
     api_cache_secs: u64,
+
+    // Chat state
+    pub chat_messages: Vec<ChatMessage>,
+    pub chat_status: ChatStatus,
+    pub chat_metrics: Option<ChatMetrics>,
+    pub chat_model: Option<String>,
+    pub tps_history: History,
+    pub last_tps: HashMap<String, f64>,
+    chat_receiver: Option<mpsc::Receiver<ChatToken>>,
+    pub chat_scroll: usize,
+
+    // Search state
+    pub search_results: Vec<SearchResult>,
+    pub search_status: Option<String>,
+    pub search_selected: usize,
+    pub show_search: bool,
+    search_receiver: Option<mpsc::Receiver<SearchStatus>>,
 }
 
 impl AiMetrics {
@@ -172,6 +266,21 @@ impl AiMetrics {
             pull_receiver: None,
             last_api_check: None,
             api_cache_secs: 5,
+
+            chat_messages: Vec::new(),
+            chat_status: ChatStatus::Idle,
+            chat_metrics: None,
+            chat_model: None,
+            tps_history: History::new(),
+            last_tps: HashMap::new(),
+            chat_receiver: None,
+            chat_scroll: 0,
+
+            search_results: Vec::new(),
+            search_status: None,
+            search_selected: 0,
+            show_search: false,
+            search_receiver: None,
         }
     }
 
@@ -179,6 +288,8 @@ impl AiMetrics {
         self.detect_services(processes);
         self.filter_ai_processes(processes);
         self.poll_pull_status();
+        self.poll_chat();
+        self.poll_search();
 
         let should_check_api = match self.last_api_check {
             Some(t) => t.elapsed().as_secs() >= self.api_cache_secs,
@@ -435,5 +546,322 @@ impl AiMetrics {
         } else {
             "Ready"
         }
+    }
+
+    // --- Chat ---
+
+    pub fn start_chat(&mut self, model: &str, messages: &[ChatMessage]) {
+        let (tx, rx) = mpsc::channel();
+        self.chat_receiver = Some(rx);
+        self.chat_status = ChatStatus::Generating;
+        self.chat_model = Some(model.to_string());
+
+        let model = model.to_string();
+        let msgs: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content,
+                })
+            })
+            .collect();
+
+        thread::spawn(move || {
+            let agent = ureq::AgentBuilder::new()
+                .timeout_connect(std::time::Duration::from_millis(2000))
+                .timeout_read(std::time::Duration::from_secs(300))
+                .build();
+
+            let body = serde_json::json!({
+                "model": model,
+                "messages": msgs,
+                "stream": true,
+            });
+
+            let start_time = Instant::now();
+            let mut first_token = true;
+
+            match agent
+                .post("http://localhost:11434/api/chat")
+                .send_json(&body)
+            {
+                Ok(resp) => {
+                    let reader = resp.into_reader();
+                    let buf_reader = std::io::BufReader::new(reader);
+                    use std::io::BufRead;
+
+                    for line in buf_reader.lines() {
+                        let line = match line {
+                            Ok(l) => l,
+                            Err(_) => break,
+                        };
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+
+                        let parsed: ChatResponseLine = match serde_json::from_str(&line) {
+                            Ok(p) => p,
+                            Err(_) => continue,
+                        };
+
+                        let done = parsed.done.unwrap_or(false);
+
+                        if done {
+                            // Final chunk with metrics
+                            let eval_count = parsed.eval_count.unwrap_or(0);
+                            let eval_duration = parsed.eval_duration.unwrap_or(1);
+                            let tps = eval_count as f64 / eval_duration as f64 * 1e9;
+                            let total_dur = parsed.total_duration.unwrap_or(0) as f64 / 1_000_000.0;
+                            let load_dur = parsed.load_duration.unwrap_or(0) as f64 / 1_000_000.0;
+                            let ttft = if first_token {
+                                start_time.elapsed().as_secs_f64() * 1000.0
+                            } else {
+                                0.0
+                            };
+
+                            let metrics = ChatMetrics {
+                                tokens_per_sec: tps,
+                                ttft_ms: ttft,
+                                prompt_tokens: parsed.prompt_eval_count.unwrap_or(0),
+                                gen_tokens: eval_count,
+                                total_duration_ms: total_dur,
+                                load_duration_ms: load_dur,
+                            };
+                            let _ = tx.send(ChatToken::Done(metrics));
+                            return;
+                        }
+
+                        // Streaming token
+                        if let Some(msg) = parsed.message {
+                            if let Some(content) = msg.content {
+                                if !content.is_empty() {
+                                    if first_token {
+                                        let ttft = start_time.elapsed().as_secs_f64() * 1000.0;
+                                        first_token = false;
+                                        let _ = tx.send(ChatToken::FirstToken(content, ttft));
+                                    } else {
+                                        let _ = tx.send(ChatToken::Token(content));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Stream ended without explicit done
+                    if first_token {
+                        let _ = tx.send(ChatToken::Error("No response received".to_string()));
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(ChatToken::Error(format!("Chat failed: {e}")));
+                }
+            }
+        });
+    }
+
+    fn poll_chat(&mut self) {
+        if self.chat_receiver.is_none() {
+            return;
+        }
+
+        let rx = self.chat_receiver.as_ref().unwrap();
+        loop {
+            match rx.try_recv() {
+                Ok(ChatToken::Token(text)) => {
+                    if let Some(last) = self.chat_messages.last_mut() {
+                        if last.role == "assistant" {
+                            last.content.push_str(&text);
+                        }
+                    }
+                }
+                Ok(ChatToken::FirstToken(text, ttft)) => {
+                    // Store TTFT for metrics that will be finalized in Done
+                    if let Some(last) = self.chat_messages.last_mut() {
+                        if last.role == "assistant" {
+                            last.content.push_str(&text);
+                        }
+                    }
+                    // Store preliminary TTFT
+                    if let Some(ref mut m) = self.chat_metrics {
+                        m.ttft_ms = ttft;
+                    } else {
+                        self.chat_metrics = Some(ChatMetrics {
+                            tokens_per_sec: 0.0,
+                            ttft_ms: ttft,
+                            prompt_tokens: 0,
+                            gen_tokens: 0,
+                            total_duration_ms: 0.0,
+                            load_duration_ms: 0.0,
+                        });
+                    }
+                }
+                Ok(ChatToken::Done(metrics)) => {
+                    // Preserve TTFT from FirstToken if the Done metrics has 0
+                    let ttft = if metrics.ttft_ms == 0.0 {
+                        self.chat_metrics.as_ref().map(|m| m.ttft_ms).unwrap_or(0.0)
+                    } else {
+                        metrics.ttft_ms
+                    };
+
+                    let final_metrics = ChatMetrics {
+                        ttft_ms: ttft,
+                        ..metrics
+                    };
+
+                    if let Some(ref model) = self.chat_model {
+                        self.last_tps
+                            .insert(model.clone(), final_metrics.tokens_per_sec);
+                    }
+                    self.tps_history.push(final_metrics.tokens_per_sec);
+                    self.chat_metrics = Some(final_metrics);
+                    self.chat_status = ChatStatus::Done;
+                    self.chat_receiver = None;
+                    return;
+                }
+                Ok(ChatToken::Error(err)) => {
+                    self.chat_status = ChatStatus::Error(err);
+                    self.chat_receiver = None;
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => return,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    if self.chat_status == ChatStatus::Generating {
+                        self.chat_status = ChatStatus::Done;
+                    }
+                    self.chat_receiver = None;
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn cancel_chat(&mut self) {
+        self.chat_receiver = None;
+        if self.chat_status == ChatStatus::Generating {
+            self.chat_status = ChatStatus::Idle;
+        }
+    }
+
+    pub fn clear_chat(&mut self) {
+        self.chat_messages.clear();
+        self.chat_metrics = None;
+        self.chat_status = ChatStatus::Idle;
+        self.chat_scroll = 0;
+    }
+
+    // --- Search ---
+
+    pub fn start_search(&mut self, query: String) {
+        let (tx, rx) = mpsc::channel();
+        self.search_receiver = Some(rx);
+        self.search_status = Some("Searching...".to_string());
+        self.search_results.clear();
+        self.search_selected = 0;
+        self.show_search = true;
+
+        thread::spawn(move || {
+            let agent = ureq::AgentBuilder::new()
+                .timeout_connect(std::time::Duration::from_millis(3000))
+                .timeout_read(std::time::Duration::from_secs(10))
+                .build();
+
+            match agent.get("https://ollama.com/api/tags").call() {
+                Ok(resp) => match resp.into_json::<OllamaLibraryResponse>() {
+                    Ok(lib) => {
+                        let query_lower = query.to_lowercase();
+                        let results: Vec<SearchResult> = lib
+                            .models
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter(|m| {
+                                let name = m.name.as_deref().unwrap_or("");
+                                let desc = m.description.as_deref().unwrap_or("");
+                                name.to_lowercase().contains(&query_lower)
+                                    || desc.to_lowercase().contains(&query_lower)
+                            })
+                            .map(|m| SearchResult {
+                                name: m.name.unwrap_or_default(),
+                                description: m.description.unwrap_or_default(),
+                            })
+                            .collect();
+                        let _ = tx.send(SearchStatus::Results(results));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SearchStatus::Error(format!(
+                            "Failed to parse response: {e}"
+                        )));
+                    }
+                },
+                Err(e) => {
+                    let _ = tx.send(SearchStatus::Error(format!("Search failed: {e}")));
+                }
+            }
+        });
+    }
+
+    fn poll_search(&mut self) {
+        if self.search_receiver.is_none() {
+            return;
+        }
+
+        let rx = self.search_receiver.as_ref().unwrap();
+        match rx.try_recv() {
+            Ok(SearchStatus::Results(results)) => {
+                if results.is_empty() {
+                    self.search_status = Some("No results found".to_string());
+                } else {
+                    self.search_status = None;
+                }
+                self.search_results = results;
+                self.search_receiver = None;
+            }
+            Ok(SearchStatus::Error(err)) => {
+                self.search_status = Some(err);
+                self.search_receiver = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.search_receiver = None;
+            }
+        }
+    }
+
+    pub fn search_select_next(&mut self) {
+        let count = self.search_results.len();
+        if count > 0 {
+            self.search_selected = (self.search_selected + 1).min(count - 1);
+        }
+    }
+
+    pub fn search_select_prev(&mut self) {
+        self.search_selected = self.search_selected.saturating_sub(1);
+    }
+
+    pub fn selected_search_model(&self) -> Option<String> {
+        self.search_results
+            .get(self.search_selected)
+            .map(|r| r.name.clone())
+    }
+
+    pub fn dismiss_search(&mut self) {
+        self.show_search = false;
+        self.search_results.clear();
+        self.search_status = None;
+        self.search_selected = 0;
+    }
+
+    pub fn has_loaded_model(&self) -> bool {
+        !self.ollama_running.is_empty()
+    }
+
+    pub fn first_loaded_model_name(&self) -> Option<String> {
+        // Prefer the selected model if it's loaded, otherwise first loaded
+        if let Some(name) = self.selected_model_name() {
+            if self.ollama_running.iter().any(|r| r.name == name) {
+                return Some(name);
+            }
+        }
+        self.ollama_running.first().map(|r| r.name.clone())
     }
 }

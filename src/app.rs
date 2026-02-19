@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::event::{self, AppEvent};
 use crate::logs::stream::LogStream;
+use crate::metrics::ai::ChatMessage;
 use crate::metrics::process::ProcessSortField;
 use crate::metrics::MetricsCollector;
 use crate::ui::tabs::Tab;
@@ -11,6 +12,8 @@ use crate::ui::tabs::Tab;
 pub enum AiInputMode {
     Normal,
     PullPrompt,
+    ChatInput,
+    SearchInput,
 }
 
 pub struct App {
@@ -30,6 +33,7 @@ pub struct App {
     pub ai_input_mode: AiInputMode,
     pub ai_input_buffer: String,
     pub ai_confirm_delete: Option<String>,
+    pub ai_chat_scroll: usize,
 }
 
 impl App {
@@ -55,6 +59,7 @@ impl App {
             ai_input_mode: AiInputMode::Normal,
             ai_input_buffer: String::new(),
             ai_confirm_delete: None,
+            ai_chat_scroll: 0,
         }
     }
 
@@ -134,6 +139,29 @@ impl App {
             return;
         }
 
+        // AI search results overlay
+        if self.metrics.ai.show_search {
+            match key.code {
+                KeyCode::Esc => {
+                    self.metrics.ai.dismiss_search();
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.metrics.ai.search_select_next();
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.metrics.ai.search_select_prev();
+                }
+                KeyCode::Enter => {
+                    if let Some(name) = self.metrics.ai.selected_search_model() {
+                        self.metrics.ai.start_pull(name);
+                        self.metrics.ai.dismiss_search();
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
         // AI pull prompt input
         if self.ai_input_mode == AiInputMode::PullPrompt {
             match key.code {
@@ -145,6 +173,72 @@ impl App {
                     let name = self.ai_input_buffer.trim().to_string();
                     if !name.is_empty() {
                         self.metrics.ai.start_pull(name);
+                    }
+                    self.ai_input_mode = AiInputMode::Normal;
+                    self.ai_input_buffer.clear();
+                }
+                KeyCode::Backspace => {
+                    self.ai_input_buffer.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.ai_input_buffer.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // AI chat input mode
+        if self.ai_input_mode == AiInputMode::ChatInput {
+            match key.code {
+                KeyCode::Esc => {
+                    self.ai_input_mode = AiInputMode::Normal;
+                    self.ai_input_buffer.clear();
+                }
+                KeyCode::Enter => {
+                    let prompt = self.ai_input_buffer.trim().to_string();
+                    if !prompt.is_empty() {
+                        if let Some(model) = self.metrics.ai.first_loaded_model_name() {
+                            // Add user message
+                            self.metrics.ai.chat_messages.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: prompt,
+                            });
+                            // Add empty assistant placeholder
+                            self.metrics.ai.chat_messages.push(ChatMessage {
+                                role: "assistant".to_string(),
+                                content: String::new(),
+                            });
+                            // Start streaming chat
+                            let messages = self.metrics.ai.chat_messages.clone();
+                            self.metrics.ai.start_chat(&model, &messages);
+                        }
+                    }
+                    self.ai_input_mode = AiInputMode::Normal;
+                    self.ai_input_buffer.clear();
+                }
+                KeyCode::Backspace => {
+                    self.ai_input_buffer.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.ai_input_buffer.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // AI search input mode
+        if self.ai_input_mode == AiInputMode::SearchInput {
+            match key.code {
+                KeyCode::Esc => {
+                    self.ai_input_mode = AiInputMode::Normal;
+                    self.ai_input_buffer.clear();
+                }
+                KeyCode::Enter => {
+                    let query = self.ai_input_buffer.trim().to_string();
+                    if !query.is_empty() {
+                        self.metrics.ai.start_search(query);
                     }
                     self.ai_input_mode = AiInputMode::Normal;
                     self.ai_input_buffer.clear();
@@ -366,6 +460,25 @@ impl App {
                     self.metrics.ai.unload_model(&name);
                 }
             }
+            KeyCode::Char('i') if self.current_tab == Tab::Ai => {
+                if self.metrics.ai.has_loaded_model() {
+                    self.ai_input_mode = AiInputMode::ChatInput;
+                    self.ai_input_buffer.clear();
+                }
+            }
+            KeyCode::Char('S') if self.current_tab == Tab::Ai => {
+                if self.metrics.ai.ollama_available {
+                    self.ai_input_mode = AiInputMode::SearchInput;
+                    self.ai_input_buffer.clear();
+                }
+            }
+            KeyCode::Char('C') if self.current_tab == Tab::Ai => {
+                self.metrics.ai.clear_chat();
+                self.ai_chat_scroll = 0;
+            }
+            KeyCode::Esc if self.current_tab == Tab::Ai => {
+                self.metrics.ai.cancel_chat();
+            }
 
             // Log keys
             KeyCode::Char('l') if self.current_tab == Tab::Logs => {
@@ -389,11 +502,16 @@ impl App {
 
     fn handle_mouse(&mut self, mouse: MouseEvent) {
         // Dismiss overlays on any click
-        if self.show_help || self.confirm_kill.is_some() || self.ai_confirm_delete.is_some() {
+        if self.show_help
+            || self.confirm_kill.is_some()
+            || self.ai_confirm_delete.is_some()
+            || self.metrics.ai.show_search
+        {
             if matches!(mouse.kind, MouseEventKind::Down(_)) {
                 self.show_help = false;
                 self.confirm_kill = None;
                 self.ai_confirm_delete = None;
+                self.metrics.ai.dismiss_search();
             }
             return;
         }

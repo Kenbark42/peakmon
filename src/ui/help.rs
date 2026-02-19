@@ -6,7 +6,7 @@ use ratatui::Frame;
 use super::theme;
 
 pub fn render(frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(60, 30, area);
+    let popup = centered_rect(60, 34, area);
     frame.render_widget(Clear, popup);
 
     let lines = vec![
@@ -34,10 +34,14 @@ pub fn render(frame: &mut Frame, area: Rect) {
         Line::raw(""),
         header_line("AI Tab"),
         key_line("j / k", "Select model"),
+        key_line("i", "Enter chat prompt"),
+        key_line("S", "Search Ollama library"),
         key_line("P", "Pull (download) a model"),
         key_line("D", "Delete selected model"),
         key_line("Enter", "Load selected model"),
         key_line("U", "Unload selected model"),
+        key_line("C", "Clear chat history"),
+        key_line("Esc", "Cancel generation"),
         Line::raw(""),
         header_line("Logs Tab"),
         key_line("l", "Cycle log level filter"),
