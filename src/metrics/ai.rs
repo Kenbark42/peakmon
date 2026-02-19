@@ -135,6 +135,7 @@ struct PullProgressLine {
     status: Option<String>,
     total: Option<u64>,
     completed: Option<u64>,
+    error: Option<String>,
 }
 
 // --- Chat Types ---
@@ -194,6 +195,8 @@ struct ChatResponseMessage {
 pub struct SearchResult {
     pub name: String,
     pub description: String,
+    pub sizes: Vec<String>,
+    pub pulls: String,
 }
 
 pub enum SearchStatus {
@@ -201,48 +204,88 @@ pub enum SearchStatus {
     Error(String),
 }
 
-/// Parse model names and descriptions from ollama.com/search HTML.
-/// Looks for `href="/library/<name>"` links followed by `<p>` descriptions.
+/// Parse model names, descriptions, sizes, and pull counts from ollama.com/search HTML.
 fn parse_search_html(html: &str) -> Vec<SearchResult> {
     let mut results = Vec::new();
-    let mut pos = 0;
     let bytes = html.as_bytes();
-    let needle = b"href=\"/library/";
+
+    // Each model card starts with <li x-test-model ...>
+    let li_needle = b"x-test-model";
+    let mut pos = 0;
 
     while pos < bytes.len() {
-        // Find next href="/library/..."
-        let Some(href_start) = find_bytes(bytes, needle, pos) else {
+        let Some(li_start) = find_bytes(bytes, li_needle, pos) else {
             break;
         };
-        let name_start = href_start + needle.len();
-        let Some(quote_end) = find_byte(bytes, b'"', name_start) else {
-            break;
-        };
-        let name = &html[name_start..quote_end];
-        pos = quote_end;
+        // Find the end of this <li> block (next <li x-test-model or end of file)
+        let block_end =
+            find_bytes(bytes, li_needle, li_start + li_needle.len()).unwrap_or(bytes.len());
 
-        // Skip variant links like /library/name:tag (we only want the base model)
-        if name.contains('/') {
+        let block = &html[li_start..block_end];
+        let block_bytes = block.as_bytes();
+        pos = block_end;
+
+        // Extract model name from href="/library/<name>"
+        let href_needle = b"href=\"/library/";
+        let Some(href_start) = find_bytes(block_bytes, href_needle, 0) else {
+            continue;
+        };
+        let name_start = href_start + href_needle.len();
+        let Some(quote_end) = find_byte(block_bytes, b'"', name_start) else {
+            continue;
+        };
+        let name = &block[name_start..quote_end];
+        if name.contains('/') || name.is_empty() {
             continue;
         }
 
-        // Avoid duplicates (the page may have multiple links to the same model)
+        // Avoid duplicates
         if results.iter().any(|r: &SearchResult| r.name == name) {
             continue;
         }
 
-        // Look for the next <p ...> tag after this link to get the description
-        let description = if let Some(p_start) = find_bytes(bytes, b"<p", pos) {
-            // Only use it if it's reasonably close (within 500 chars)
-            if p_start - pos < 500 {
-                if let Some(gt) = find_byte(bytes, b'>', p_start) {
-                    if let Some(p_end) = find_bytes(bytes, b"</p>", gt + 1) {
-                        let raw = &html[gt + 1..p_end];
-                        // Strip any inner HTML tags and clean up whitespace
-                        strip_html_tags(raw).trim().to_string()
-                    } else {
-                        String::new()
+        // Extract description from <p class="max-w-lg ...">...</p>
+        let desc_needle = b"max-w-lg";
+        let description = if let Some(desc_start) = find_bytes(block_bytes, desc_needle, 0) {
+            if let Some(gt) = find_byte(block_bytes, b'>', desc_start) {
+                if let Some(p_end) = find_bytes(block_bytes, b"</p>", gt + 1) {
+                    decode_html_entities(strip_html_tags(&block[gt + 1..p_end]).trim())
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        // Extract parameter sizes from <span x-test-size ...>8b</span>
+        let size_needle = b"x-test-size";
+        let mut sizes = Vec::new();
+        let mut spos = 0;
+        while let Some(s_start) = find_bytes(block_bytes, size_needle, spos) {
+            if let Some(gt) = find_byte(block_bytes, b'>', s_start) {
+                if let Some(s_end) = find_bytes(block_bytes, b"</span>", gt + 1) {
+                    let size_text = block[gt + 1..s_end].trim().to_string();
+                    if !size_text.is_empty() {
+                        sizes.push(size_text);
                     }
+                    spos = s_end;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Extract pull count from <span x-test-pull-count>110.4M</span>
+        let pull_needle = b"x-test-pull-count";
+        let pulls = if let Some(p_start) = find_bytes(block_bytes, pull_needle, 0) {
+            if let Some(gt) = find_byte(block_bytes, b'>', p_start) {
+                if let Some(p_end) = find_bytes(block_bytes, b"</span>", gt + 1) {
+                    block[gt + 1..p_end].trim().to_string()
                 } else {
                     String::new()
                 }
@@ -256,6 +299,8 @@ fn parse_search_html(html: &str) -> Vec<SearchResult> {
         results.push(SearchResult {
             name: name.to_string(),
             description,
+            sizes,
+            pulls,
         });
     }
 
@@ -294,6 +339,15 @@ fn strip_html_tags(s: &str) -> String {
     out
 }
 
+fn decode_html_entities(s: &str) -> String {
+    s.replace("&#39;", "'")
+        .replace("&#x27;", "'")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+}
+
 // --- Main AI Metrics Struct ---
 
 pub struct AiMetrics {
@@ -308,6 +362,7 @@ pub struct AiMetrics {
     pub cpu_history: History,
     pub model_selected: usize,
     pub pull_status: Option<PullStatus>,
+    pub pull_model_name: Option<String>,
     pull_receiver: Option<mpsc::Receiver<PullStatus>>,
     last_api_check: Option<Instant>,
     api_cache_secs: u64,
@@ -344,6 +399,7 @@ impl AiMetrics {
             cpu_history: History::new(),
             model_selected: 0,
             pull_status: None,
+            pull_model_name: None,
             pull_receiver: None,
             last_api_check: None,
             api_cache_secs: 5,
@@ -477,6 +533,7 @@ impl AiMetrics {
     pub fn start_pull(&mut self, model_name: String) {
         let (tx, rx) = mpsc::channel();
         self.pull_receiver = Some(rx);
+        self.pull_model_name = Some(model_name.clone());
         self.pull_status = Some(PullStatus::Progress {
             status: "Starting pull...".to_string(),
             percent: None,
@@ -484,8 +541,8 @@ impl AiMetrics {
 
         thread::spawn(move || {
             let agent = ureq::AgentBuilder::new()
-                .timeout_connect(std::time::Duration::from_millis(2000))
-                .timeout_read(std::time::Duration::from_secs(300))
+                .timeout_connect(std::time::Duration::from_millis(5000))
+                .timeout_read(std::time::Duration::from_secs(600))
                 .build();
 
             let body = serde_json::json!({ "name": model_name, "stream": true });
@@ -498,15 +555,24 @@ impl AiMetrics {
                     let reader = resp.into_reader();
                     let buf_reader = std::io::BufReader::new(reader);
                     use std::io::BufRead;
+                    let mut got_any_status = false;
                     for line in buf_reader.lines() {
                         let line = match line {
                             Ok(l) => l,
-                            Err(_) => break,
+                            Err(e) => {
+                                let _ = tx.send(PullStatus::Error(format!("Read error: {e}")));
+                                return;
+                            }
                         };
                         if line.trim().is_empty() {
                             continue;
                         }
                         if let Ok(progress) = serde_json::from_str::<PullProgressLine>(&line) {
+                            // Check for error in response
+                            if let Some(err) = progress.error {
+                                let _ = tx.send(PullStatus::Error(err));
+                                return;
+                            }
                             let percent = match (progress.total, progress.completed) {
                                 (Some(total), Some(completed)) if total > 0 => {
                                     Some(completed as f64 / total as f64 * 100.0)
@@ -514,6 +580,7 @@ impl AiMetrics {
                                 _ => None,
                             };
                             let status = progress.status.unwrap_or_default();
+                            got_any_status = true;
                             if status.contains("success") {
                                 let _ = tx.send(PullStatus::Done);
                                 return;
@@ -521,10 +588,32 @@ impl AiMetrics {
                             let _ = tx.send(PullStatus::Progress { status, percent });
                         }
                     }
-                    let _ = tx.send(PullStatus::Done);
+                    if got_any_status {
+                        let _ = tx.send(PullStatus::Done);
+                    } else {
+                        let _ = tx.send(PullStatus::Error(
+                            "No response from Ollama — is the model name valid?".to_string(),
+                        ));
+                    }
                 }
                 Err(e) => {
-                    let _ = tx.send(PullStatus::Error(format!("Pull failed: {e}")));
+                    // ureq returns non-2xx as errors; extract body if available
+                    let msg = match e {
+                        ureq::Error::Status(code, resp) => {
+                            let body = resp.into_string().unwrap_or_default();
+                            if let Ok(parsed) = serde_json::from_str::<PullProgressLine>(&body) {
+                                if let Some(err) = parsed.error {
+                                    format!("Pull failed ({code}): {err}")
+                                } else {
+                                    format!("Pull failed: HTTP {code}")
+                                }
+                            } else {
+                                format!("Pull failed: HTTP {code}")
+                            }
+                        }
+                        other => format!("Pull failed: {other}"),
+                    };
+                    let _ = tx.send(PullStatus::Error(msg));
                 }
             }
         });
@@ -916,9 +1005,14 @@ impl AiMetrics {
     }
 
     pub fn selected_search_model(&self) -> Option<String> {
-        self.search_results
-            .get(self.search_selected)
-            .map(|r| r.name.clone())
+        self.search_results.get(self.search_selected).map(|r| {
+            // Append the first (smallest) size tag so the pull targets a specific variant
+            if let Some(first_size) = r.sizes.first() {
+                format!("{}:{}", r.name, first_size)
+            } else {
+                r.name.clone()
+            }
+        })
     }
 
     pub fn dismiss_search(&mut self) {

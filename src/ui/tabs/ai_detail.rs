@@ -19,11 +19,13 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector, chat_sc
     // Dynamic layout: allocate space based on what content exists
     let perf_height = if has_perf { 3 } else { 0 };
     let chat_min = if has_chat { 6 } else { 3 };
+    let is_pulling = matches!(&ai.pull_status, Some(PullStatus::Progress { .. }));
+    let models_height = if is_pulling { 11 } else { 8 };
 
     let mut constraints = vec![
-        Constraint::Length(3),     // AI Services
-        Constraint::Length(8),     // Models table (compact)
-        Constraint::Min(chat_min), // Chat area (flexible)
+        Constraint::Length(3),             // AI Services
+        Constraint::Length(models_height), // Models table + optional progress bar
+        Constraint::Min(chat_min),         // Chat area (flexible)
     ];
     if has_perf {
         constraints.push(Constraint::Length(perf_height)); // Performance bar
@@ -81,12 +83,25 @@ fn render_services(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
 }
 
 fn render_models(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
+    // If a pull is in progress, split the area to show a progress bar
+    let is_pulling = matches!(&ai.pull_status, Some(PullStatus::Progress { .. }));
+    let (models_area, pull_area) = if is_pulling {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(4), Constraint::Length(3)])
+            .split(area);
+        (chunks[0], Some(chunks[1]))
+    } else {
+        (area, None)
+    };
+
+    // Build title with pull status for non-progress states
     let pull_info = match &ai.pull_status {
-        Some(PullStatus::Progress { status, percent }) => {
-            let pct = percent.map(|p| format!(" {p:.0}%")).unwrap_or_default();
-            format!(" — Pulling: {status}{pct}")
+        Some(PullStatus::Progress { .. }) => String::new(), // shown in progress bar
+        Some(PullStatus::Done) => {
+            let name = ai.pull_model_name.as_deref().unwrap_or("model");
+            format!(" — {name} pulled!")
         }
-        Some(PullStatus::Done) => " — Pull complete!".to_string(),
         Some(PullStatus::Error(e)) => format!(" — {e}"),
         None => String::new(),
     };
@@ -104,17 +119,17 @@ fn render_models(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
             theme::label_style(),
         ))
         .block(block);
-        frame.render_widget(msg, area);
+        frame.render_widget(msg, models_area);
         return;
     }
 
     if ai.ollama_models.is_empty() {
         let msg = Paragraph::new(Line::styled(
-            " No models downloaded — press P to pull a model",
+            " No models downloaded — press S to search and pull a model",
             theme::label_style(),
         ))
         .block(block);
-        frame.render_widget(msg, area);
+        frame.render_widget(msg, models_area);
         return;
     }
 
@@ -186,7 +201,60 @@ fn render_models(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     .header(header)
     .block(block);
 
-    frame.render_widget(table, area);
+    frame.render_widget(table, models_area);
+
+    // Render pull progress bar
+    if let Some(pull_area) = pull_area {
+        render_pull_progress(frame, pull_area, ai);
+    }
+}
+
+fn render_pull_progress(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
+    if let Some(PullStatus::Progress { status, percent }) = &ai.pull_status {
+        let model_name = ai.pull_model_name.as_deref().unwrap_or("model");
+        let pct = percent.unwrap_or(0.0);
+        let pct_display = if percent.is_some() {
+            format!(" {pct:.0}%")
+        } else {
+            String::new()
+        };
+
+        let title = format!(" Pulling {model_name}{pct_display} — {status} ");
+
+        let block = Block::default()
+            .title(Line::styled(title, Style::default().fg(theme::MAUVE)))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MAUVE))
+            .style(Style::default().bg(theme::BASE));
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        // Draw the progress bar
+        if inner.width > 0 && inner.height > 0 {
+            let filled = if percent.is_some() {
+                ((pct / 100.0) * inner.width as f64) as u16
+            } else {
+                0
+            };
+            let bar_area = Rect {
+                x: inner.x,
+                y: inner.y,
+                width: inner.width,
+                height: 1,
+            };
+
+            // Build the bar: filled portion + empty portion
+            let filled_str: String = "\u{2588}".repeat(filled as usize);
+            let empty_str: String = "\u{2591}".repeat(inner.width.saturating_sub(filled) as usize);
+
+            let bar_line = Line::from(vec![
+                Span::styled(filled_str, Style::default().fg(theme::MAUVE)),
+                Span::styled(empty_str, Style::default().fg(theme::SURFACE1)),
+            ]);
+            frame.render_widget(Paragraph::new(bar_line), bar_area);
+        }
+    }
 }
 
 fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics, chat_scroll: usize) {

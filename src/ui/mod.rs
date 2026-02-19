@@ -184,7 +184,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
 fn render_search_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let ai = &app.metrics.ai;
-    let popup = centered_rect(65, 20, area);
+    let popup = centered_rect(80, 22, area);
     frame.render_widget(Clear, popup);
 
     let block = Block::default()
@@ -210,7 +210,9 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Name", theme::title_style())),
+        Cell::from(Span::styled("Model", theme::title_style())),
+        Cell::from(Span::styled("Sizes", theme::title_style())),
+        Cell::from(Span::styled("Pulls", theme::title_style())),
         Cell::from(Span::styled("Description", theme::title_style())),
     ])
     .height(1);
@@ -226,15 +228,19 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 Style::default()
             };
 
+            let sizes = result.sizes.join(", ");
+
             // Truncate description to fit
-            let desc = if result.description.len() > 50 {
-                format!("{}...", &result.description[..47])
+            let desc = if result.description.len() > 40 {
+                format!("{}...", &result.description[..37])
             } else {
                 result.description.clone()
             };
 
             Row::new(vec![
                 Cell::from(Span::styled(&*result.name, theme::value_style())),
+                Cell::from(Span::styled(sizes, Style::default().fg(theme::BLUE))),
+                Cell::from(Span::styled(&*result.pulls, theme::label_style())),
                 Cell::from(Span::styled(desc, theme::label_style())),
             ])
             .style(style)
@@ -243,7 +249,12 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let table = Table::new(
         rows,
-        [Constraint::Percentage(35), Constraint::Percentage(65)],
+        [
+            Constraint::Percentage(20),
+            Constraint::Percentage(22),
+            Constraint::Percentage(10),
+            Constraint::Percentage(48),
+        ],
     )
     .header(header)
     .block(block);
