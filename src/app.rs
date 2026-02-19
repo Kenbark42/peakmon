@@ -553,7 +553,11 @@ impl App {
                 } else if self.current_tab == Tab::Temperatures {
                     self.metrics.temperature.select_prev();
                 } else if self.current_tab == Tab::Ai {
-                    self.metrics.ai.select_prev();
+                    if !self.metrics.ai.chat_messages.is_empty() {
+                        self.ai_chat_scroll = self.ai_chat_scroll.saturating_add(3);
+                    } else {
+                        self.metrics.ai.select_prev();
+                    }
                 } else {
                     self.scroll_offset = self.scroll_offset.saturating_sub(3);
                 }
@@ -570,7 +574,11 @@ impl App {
                 } else if self.current_tab == Tab::Temperatures {
                     self.metrics.temperature.select_next();
                 } else if self.current_tab == Tab::Ai {
-                    self.metrics.ai.select_next();
+                    if !self.metrics.ai.chat_messages.is_empty() {
+                        self.ai_chat_scroll = self.ai_chat_scroll.saturating_sub(3);
+                    } else {
+                        self.metrics.ai.select_next();
+                    }
                 } else {
                     self.scroll_offset = self.scroll_offset.saturating_add(3);
                 }

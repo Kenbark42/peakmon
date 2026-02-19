@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 
 use crate::metrics::ai::{AiMetrics, ChatStatus, PullStatus};
@@ -316,7 +316,6 @@ fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics, chat_scroll: usize
 
     let paragraph = Paragraph::new(lines)
         .block(block)
-        .wrap(Wrap { trim: false })
         .scroll((scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
