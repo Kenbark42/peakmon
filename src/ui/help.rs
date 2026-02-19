@@ -33,7 +33,7 @@ pub fn render(frame: &mut Frame, area: Rect) {
         key_line("K", "Kill selected process (SIGTERM)"),
         Line::raw(""),
         header_line("AI Tab"),
-        key_line("j / k", "Select model"),
+        key_line("j / k", "Select model / scroll chat"),
         key_line("i", "Enter chat prompt"),
         key_line("S", "Search Ollama library"),
         key_line("P", "Pull (download) a model"),

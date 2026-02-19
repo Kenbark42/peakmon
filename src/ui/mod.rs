@@ -17,6 +17,13 @@ use tabs::Tab;
 
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
+
+    // Paint the entire screen with BASE background before anything else renders
+    frame.render_widget(
+        Block::default().style(Style::default().bg(theme::BASE)),
+        area,
+    );
+
     let app_layout = layout::compute_layout(area);
 
     // Header
@@ -48,7 +55,9 @@ pub fn render(frame: &mut Frame, app: &App) {
         ),
         Tab::Logs => tabs::logs::render(frame, app_layout.body, &app.log_stream, app.scroll_offset),
         Tab::Gpu => tabs::gpu_detail::render(frame, app_layout.body, &app.metrics),
-        Tab::Ai => tabs::ai_detail::render(frame, app_layout.body, &app.metrics),
+        Tab::Ai => {
+            tabs::ai_detail::render(frame, app_layout.body, &app.metrics, app.ai_chat_scroll)
+        }
         Tab::Temperatures => tabs::temperatures::render(frame, app_layout.body, &app.metrics),
     }
 
@@ -202,7 +211,7 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(Line::styled(
-            " Search Results — Enter to pull, Esc to close ",
+            " Search Results — Enter to pull, S new search, Esc to close ",
             theme::title_style(),
         ))
         .borders(Borders::ALL)

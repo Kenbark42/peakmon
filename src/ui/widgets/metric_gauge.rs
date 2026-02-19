@@ -1,4 +1,5 @@
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Gauge};
 use ratatui::Frame;
@@ -11,7 +12,8 @@ pub fn render(frame: &mut Frame, area: Rect, title: &str, percent: f64, label: &
     let block = Block::default()
         .title(Line::styled(format!(" {title} "), theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let gauge = Gauge::default()
         .block(block)

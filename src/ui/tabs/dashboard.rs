@@ -1,4 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Row, Table};
 use ratatui::Frame;
@@ -96,7 +97,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let proc_block = Block::default()
         .title(Line::styled(" Top Processes ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let table = Table::new(procs, &widths).header(header).block(proc_block);
     frame.render_widget(table, main_chunks[3]);
@@ -110,7 +112,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let net_block = Block::default()
         .title(Line::styled(" Network ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let net_para = ratatui::widgets::Paragraph::new(Line::styled(net_info, theme::value_style()))
         .block(net_block);

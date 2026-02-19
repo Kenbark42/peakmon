@@ -1,4 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Row, Table};
 use ratatui::Frame;
@@ -61,7 +62,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let block = Block::default()
         .title(Line::styled(" Volumes ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let table = Table::new(rows, &widths).header(header).block(block);
     frame.render_widget(table, chunks[0]);

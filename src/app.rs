@@ -157,6 +157,11 @@ impl App {
                         self.metrics.ai.dismiss_search();
                     }
                 }
+                KeyCode::Char('S') => {
+                    // Start new search from within results overlay
+                    self.ai_input_mode = AiInputMode::SearchInput;
+                    self.ai_input_buffer.clear();
+                }
                 _ => {}
             }
             return;
@@ -212,6 +217,8 @@ impl App {
                             // Start streaming chat
                             let messages = self.metrics.ai.chat_messages.clone();
                             self.metrics.ai.start_chat(&model, &messages);
+                            // Auto-scroll to bottom for new generation
+                            self.ai_chat_scroll = 0;
                         }
                     }
                     self.ai_input_mode = AiInputMode::Normal;
@@ -342,7 +349,14 @@ impl App {
             // Scroll / selection
             KeyCode::Char('j') | KeyCode::Down => match self.current_tab {
                 Tab::Temperatures => self.metrics.temperature.select_next(),
-                Tab::Ai => self.metrics.ai.select_next(),
+                Tab::Ai => {
+                    if self.metrics.ai.chat_messages.is_empty() {
+                        self.metrics.ai.select_next();
+                    } else {
+                        // Scroll toward bottom (decrease offset from bottom)
+                        self.ai_chat_scroll = self.ai_chat_scroll.saturating_sub(1);
+                    }
+                }
                 Tab::Processes => {
                     let count = self.metrics.processes.filtered_processes().len();
                     if count > 0 {
@@ -357,7 +371,14 @@ impl App {
             },
             KeyCode::Char('k') | KeyCode::Up => match self.current_tab {
                 Tab::Temperatures => self.metrics.temperature.select_prev(),
-                Tab::Ai => self.metrics.ai.select_prev(),
+                Tab::Ai => {
+                    if self.metrics.ai.chat_messages.is_empty() {
+                        self.metrics.ai.select_prev();
+                    } else {
+                        // Scroll toward top (increase offset from bottom)
+                        self.ai_chat_scroll = self.ai_chat_scroll.saturating_add(1);
+                    }
+                }
                 Tab::Processes => {
                     self.process_selected = self.process_selected.saturating_sub(1);
                     if self.process_selected < self.scroll_offset {
@@ -371,12 +392,18 @@ impl App {
                 if self.current_tab == Tab::Processes {
                     self.process_selected = 0;
                 }
+                if self.current_tab == Tab::Ai {
+                    self.ai_chat_scroll = usize::MAX; // jump to top (max offset from bottom)
+                }
             }
             KeyCode::Char('G') => {
                 self.scroll_offset = usize::MAX;
                 if self.current_tab == Tab::Processes {
                     let count = self.metrics.processes.filtered_processes().len();
                     self.process_selected = count.saturating_sub(1);
+                }
+                if self.current_tab == Tab::Ai {
+                    self.ai_chat_scroll = 0; // jump to bottom (follow)
                 }
             }
             KeyCode::PageDown => {

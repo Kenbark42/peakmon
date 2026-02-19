@@ -10,7 +10,7 @@ use crate::ui::theme;
 use crate::ui::widgets::sparkline_panel;
 use crate::util::{format_bytes, format_percent};
 
-pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
+pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector, chat_scroll: usize) {
     let ai = &metrics.ai;
 
     let has_chat = !ai.chat_messages.is_empty();
@@ -40,7 +40,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     idx += 1;
     render_models(frame, chunks[idx], ai);
     idx += 1;
-    render_chat(frame, chunks[idx], ai);
+    render_chat(frame, chunks[idx], ai, chat_scroll);
     idx += 1;
     if has_perf {
         render_performance(frame, chunks[idx], ai);
@@ -53,7 +53,8 @@ fn render_services(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     let block = Block::default()
         .title(Line::styled(" AI Services ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let mut spans: Vec<Span> = vec![Span::raw(" ")];
     for service in &ai.services {
@@ -94,7 +95,8 @@ fn render_models(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     let block = Block::default()
         .title(Line::styled(title, theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     if !ai.ollama_available {
         let msg = Paragraph::new(Line::styled(
@@ -187,7 +189,7 @@ fn render_models(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     frame.render_widget(table, area);
 }
 
-fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
+fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics, chat_scroll: usize) {
     let status_indicator = match &ai.chat_status {
         ChatStatus::Generating => " [generating...] ",
         ChatStatus::Error(e) => {
@@ -207,7 +209,8 @@ fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     let block = Block::default()
         .title(Line::styled(title_extra, theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     if ai.chat_messages.is_empty() {
         let hint = if ai.has_loaded_model() {
@@ -288,10 +291,28 @@ fn render_chat(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
         )));
     }
 
-    // Auto-scroll to bottom
+    // Scroll with support for user-controlled offset from bottom
     let visible_height = area.height.saturating_sub(2) as usize; // borders
     let total_lines = lines.len();
-    let scroll = total_lines.saturating_sub(visible_height);
+    let max_scroll = total_lines.saturating_sub(visible_height);
+    // chat_scroll is offset from bottom: 0 = follow bottom, higher = further up
+    let clamped_chat_scroll = chat_scroll.min(max_scroll);
+    let scroll = max_scroll.saturating_sub(clamped_chat_scroll);
+
+    // Show scroll position hint in title when not at bottom
+    let block = if clamped_chat_scroll > 0 {
+        let pct = if max_scroll > 0 {
+            ((max_scroll - clamped_chat_scroll) * 100) / max_scroll
+        } else {
+            100
+        };
+        block.title_bottom(Line::styled(
+            format!(" {pct}% ↓j ↑k "),
+            theme::label_style(),
+        ))
+    } else {
+        block
+    };
 
     let paragraph = Paragraph::new(lines)
         .block(block)
@@ -340,7 +361,8 @@ fn render_performance(frame: &mut Frame, area: Rect, ai: &AiMetrics) {
     let block = Block::default()
         .title(Line::styled(" Performance ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     if let Some(ref m) = ai.chat_metrics {
         let total_secs = m.total_duration_ms / 1000.0;

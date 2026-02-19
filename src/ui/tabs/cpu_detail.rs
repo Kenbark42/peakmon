@@ -53,7 +53,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
             theme::title_style(),
         ))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let bar_width = if metrics.cpu.core_count > 0 {
         let available = area.width.saturating_sub(2) as usize;

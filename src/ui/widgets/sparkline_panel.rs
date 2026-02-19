@@ -22,7 +22,8 @@ pub fn render(
             Style::default().fg(color),
         ))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let sparkline = Sparkline::default()
         .block(block)

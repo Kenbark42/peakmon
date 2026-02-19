@@ -13,7 +13,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         let block = Block::default()
             .title(Line::styled(" Temperatures ", theme::title_style()))
             .borders(Borders::ALL)
-            .border_style(theme::border_style());
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::BASE));
 
         let msg = ratatui::widgets::Paragraph::new(Line::styled(
             " No temperature sensors available. May require running with elevated privileges.",
@@ -70,7 +71,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
             theme::title_style(),
         ))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let barchart = BarChart::default()
         .block(bar_block)

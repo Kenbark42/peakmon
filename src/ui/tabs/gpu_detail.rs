@@ -1,4 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -27,7 +28,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let info_block = Block::default()
         .title(Line::styled(" GPU ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let info_text = Line::from(vec![
         Span::styled(" Model: ", theme::label_style()),
@@ -72,7 +74,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let mem_block = Block::default()
         .title(Line::styled(" GPU Memory ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let mem_text = Line::from(vec![
         Span::styled(" In Use: ", theme::label_style()),

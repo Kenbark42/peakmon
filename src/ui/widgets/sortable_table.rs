@@ -1,4 +1,5 @@
 use ratatui::layout::{Constraint, Rect};
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Row, Table};
 use ratatui::Frame;
@@ -39,7 +40,8 @@ pub fn render(
     let block = Block::default()
         .title(Line::styled(format!(" {title} "), theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let table = Table::new(rows, &widths)
         .header(header)

@@ -1,4 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -45,7 +46,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let conn_block = Block::default()
         .title(Line::styled(" TCP Connections ", theme::title_style()))
         .borders(Borders::ALL)
-        .border_style(theme::border_style());
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
 
     let conn_line = Line::from(vec![
         Span::styled(" ESTABLISHED ", theme::label_style()),
