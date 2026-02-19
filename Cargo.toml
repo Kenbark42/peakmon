@@ -1,6 +1,6 @@
 [package]
 name = "peakmon"
-version = "0.5.3"
+version = "0.6.0"
 edition = "2021"
 description = "A real-time terminal system monitor for macOS"
 license = "MIT"
@@ -10,7 +10,6 @@ repository = "https://github.com/kenbarker/peakmon"
 ratatui = "0.29"
 crossterm = "0.28"
 sysinfo = "0.33"
-tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 color-eyre = "0.6"
 hostname = "0.4"

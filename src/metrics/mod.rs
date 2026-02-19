@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod battery;
 pub mod cpu;
 pub mod disk;
 pub mod gpu;
@@ -9,6 +10,7 @@ pub mod process;
 pub mod temperature;
 
 use ai::AiMetrics;
+use battery::BatteryMetrics;
 use cpu::CpuMetrics;
 use disk::DiskMetrics;
 use gpu::GpuMetrics;
@@ -33,6 +35,7 @@ pub struct MetricsCollector {
     pub temperature: TemperatureMetrics,
     pub gpu: GpuMetrics,
     pub ai: AiMetrics,
+    pub battery: BatteryMetrics,
     pub boot_time: u64,
 }
 
@@ -61,6 +64,7 @@ impl MetricsCollector {
             temperature: TemperatureMetrics::new(),
             gpu: GpuMetrics::new(),
             ai: AiMetrics::new(),
+            battery: BatteryMetrics::new(),
             boot_time,
         }
     }
@@ -79,6 +83,7 @@ impl MetricsCollector {
         let needs_temps = matches!(active_tab, Tab::Temperatures);
         let needs_gpu = matches!(active_tab, Tab::Dashboard | Tab::Gpu | Tab::Ai);
         let needs_ai = matches!(active_tab, Tab::Ai);
+        let needs_battery = matches!(active_tab, Tab::Dashboard);
 
         if needs_processes {
             self.sys.refresh_processes(ProcessesToUpdate::All, true);
@@ -106,6 +111,10 @@ impl MetricsCollector {
 
         if needs_ai {
             self.ai.update(&self.processes.processes);
+        }
+
+        if needs_battery {
+            self.battery.update();
         }
     }
 

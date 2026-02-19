@@ -22,6 +22,7 @@ impl TemperatureMetrics {
     }
 
     pub fn update(&mut self, components: &Components) {
+        let mut added_new = false;
         for component in components.list() {
             let label = component.label().to_string();
             let temp = component.temperature().unwrap_or(0.0) as f64;
@@ -40,11 +41,14 @@ impl TemperatureMetrics {
                 };
                 sensor.history.push(temp);
                 self.sensors.push(sensor);
+                added_new = true;
             }
         }
 
-        // Sort sensors by label for consistent display
-        self.sensors.sort_by(|a, b| a.label.cmp(&b.label));
+        // Only re-sort when a new sensor appears
+        if added_new {
+            self.sensors.sort_unstable_by(|a, b| a.label.cmp(&b.label));
+        }
     }
 
     pub fn select_next(&mut self) {

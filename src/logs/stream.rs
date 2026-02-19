@@ -1,4 +1,5 @@
 use super::{LogEntry, LogLevel};
+use crate::util::contains_ignore_ascii_case;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -76,6 +77,7 @@ impl LogStream {
     }
 
     pub fn filtered_entries(&self) -> Vec<&LogEntry> {
+        let has_text_filter = !self.text_filter.is_empty();
         self.entries
             .iter()
             .filter(|e| {
@@ -84,13 +86,11 @@ impl LogStream {
                         return false;
                     }
                 }
-                if !self.text_filter.is_empty() {
-                    let filter = self.text_filter.to_lowercase();
-                    if !e.message.to_lowercase().contains(&filter)
-                        && !e.process.to_lowercase().contains(&filter)
-                    {
-                        return false;
-                    }
+                if has_text_filter
+                    && !contains_ignore_ascii_case(&e.message, &self.text_filter)
+                    && !contains_ignore_ascii_case(&e.process, &self.text_filter)
+                {
+                    return false;
                 }
                 true
             })

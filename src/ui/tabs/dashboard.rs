@@ -10,16 +10,25 @@ use crate::ui::widgets::{metric_gauge, sparkline_panel};
 use crate::util::{format_bytes, format_percent, format_rate};
 
 pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
+    let has_battery = metrics.battery.available;
+
+    let mut constraints = vec![
+        Constraint::Length(5), // CPU sparkline
+        Constraint::Length(3), // Memory gauge
+        Constraint::Length(3), // Swap gauge
+    ];
+    if has_battery {
+        constraints.push(Constraint::Length(3)); // Battery gauge
+    }
+    constraints.push(Constraint::Min(6)); // Top processes table
+    constraints.push(Constraint::Length(3)); // Network summary
+
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(5), // CPU sparkline
-            Constraint::Length(3), // Memory gauge
-            Constraint::Length(3), // Swap gauge
-            Constraint::Min(6),    // Top processes table
-            Constraint::Length(3), // Network summary
-        ])
+        .constraints(constraints)
         .split(area);
+
+    let mut idx = 0;
 
     // CPU sparkline
     let cpu_data = metrics
@@ -29,13 +38,14 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let cpu_label = format_percent(metrics.cpu.aggregate_usage);
     sparkline_panel::render(
         frame,
-        main_chunks[0],
+        main_chunks[idx],
         "CPU",
         &cpu_data,
         Some(100),
         theme::BLUE,
         &cpu_label,
     );
+    idx += 1;
 
     // Memory gauge
     let mem_label = format!(
@@ -46,11 +56,12 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     );
     metric_gauge::render(
         frame,
-        main_chunks[1],
+        main_chunks[idx],
         "Memory",
         metrics.memory.ram_percent,
         &mem_label,
     );
+    idx += 1;
 
     // Swap gauge
     let swap_label = format!(
@@ -61,11 +72,30 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     );
     metric_gauge::render(
         frame,
-        main_chunks[2],
+        main_chunks[idx],
         "Swap",
         metrics.memory.swap_percent,
         &swap_label,
     );
+    idx += 1;
+
+    // Battery gauge (conditional)
+    if has_battery {
+        let bat = &metrics.battery;
+        let state = if bat.fully_charged {
+            "Charged"
+        } else if bat.is_charging {
+            "Charging"
+        } else {
+            "Discharging"
+        };
+        let bat_label = format!(
+            "{:.0}% \u{25cf} {}  {} cycles  Health: {:.1}%  {:.1}\u{00b0}C  {:.1}W",
+            bat.percent, state, bat.cycle_count, bat.health_percent, bat.temperature, bat.watts,
+        );
+        metric_gauge::render(frame, main_chunks[idx], "Battery", bat.percent, &bat_label);
+        idx += 1;
+    }
 
     // Top processes
     let procs: Vec<Row> = metrics
@@ -101,7 +131,8 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         .style(Style::default().bg(theme::BASE));
 
     let table = Table::new(procs, &widths).header(header).block(proc_block);
-    frame.render_widget(table, main_chunks[3]);
+    frame.render_widget(table, main_chunks[idx]);
+    idx += 1;
 
     // Network summary
     let net_info = format!(
@@ -117,5 +148,5 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
 
     let net_para = ratatui::widgets::Paragraph::new(Line::styled(net_info, theme::value_style()))
         .block(net_block);
-    frame.render_widget(net_para, main_chunks[4]);
+    frame.render_widget(net_para, main_chunks[idx]);
 }

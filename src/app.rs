@@ -340,7 +340,7 @@ impl App {
                     }
                 }
                 Tab::Processes => {
-                    let count = self.metrics.processes.filtered_processes().len();
+                    let count = self.metrics.processes.filtered_count();
                     if count > 0 {
                         self.process_selected = (self.process_selected + 1).min(count - 1);
                         // Auto-scroll to keep selection visible
@@ -381,7 +381,7 @@ impl App {
             KeyCode::Char('G') => {
                 self.scroll_offset = usize::MAX;
                 if self.current_tab == Tab::Processes {
-                    let count = self.metrics.processes.filtered_processes().len();
+                    let count = self.metrics.processes.filtered_count();
                     self.process_selected = count.saturating_sub(1);
                 }
                 if self.current_tab == Tab::Ai {
@@ -390,7 +390,7 @@ impl App {
             }
             KeyCode::PageDown => {
                 if self.current_tab == Tab::Processes {
-                    let count = self.metrics.processes.filtered_processes().len();
+                    let count = self.metrics.processes.filtered_count();
                     self.process_selected =
                         (self.process_selected + self.viewport_height).min(count.saturating_sub(1));
                     self.scroll_offset = self.scroll_offset.saturating_add(self.viewport_height);
@@ -573,7 +573,7 @@ impl App {
             }
             MouseEventKind::ScrollDown => {
                 if self.current_tab == Tab::Processes {
-                    let count = self.metrics.processes.filtered_processes().len();
+                    let count = self.metrics.processes.filtered_count();
                     if count > 0 {
                         self.process_selected = (self.process_selected + 3).min(count - 1);
                         if self.process_selected >= self.scroll_offset + self.viewport_height {

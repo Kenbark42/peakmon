@@ -58,6 +58,21 @@ pub fn format_percent(value: f64) -> String {
     format!("{:.1}%", value)
 }
 
+/// Case-insensitive ASCII substring search without allocation.
+/// `needle` should be lowercase for best results.
+pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if needle.len() > haystack.len() {
+        return false;
+    }
+    haystack
+        .as_bytes()
+        .windows(needle.len())
+        .any(|w| w.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
 /// Copy text to system clipboard via `pbcopy`. Returns true on success.
 pub fn copy_to_clipboard(text: &str) -> bool {
     use std::io::Write;

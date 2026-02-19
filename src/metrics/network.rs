@@ -1,5 +1,6 @@
 use super::history::History;
 use std::process::Command;
+use std::time::Instant;
 use sysinfo::Networks;
 
 pub struct InterfaceMetrics {
@@ -33,6 +34,7 @@ pub struct NetworkMetrics {
     pub total_rx_history: History,
     pub total_tx_history: History,
     pub connections: ConnectionCounts,
+    last_netstat: Option<Instant>,
 }
 
 impl NetworkMetrics {
@@ -50,6 +52,7 @@ impl NetworkMetrics {
                 close_wait: 0,
                 other: 0,
             },
+            last_netstat: None,
         }
     }
 
@@ -97,7 +100,12 @@ impl NetworkMetrics {
         self.total_rx_history.push(total_rx);
         self.total_tx_history.push(total_tx);
 
-        self.refresh_connections();
+        // Throttle netstat to every 5 seconds (subprocess spawn is expensive)
+        let should_refresh = self.last_netstat.is_none_or(|t| t.elapsed().as_secs() >= 5);
+        if should_refresh {
+            self.refresh_connections();
+            self.last_netstat = Some(Instant::now());
+        }
     }
 
     fn refresh_connections(&mut self) {

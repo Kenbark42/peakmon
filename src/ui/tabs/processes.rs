@@ -52,25 +52,12 @@ pub fn render(
         },
     ];
 
-    let (items, total_count): (Vec<&ProcessInfo>, usize) = if sort.tree_mode {
-        // Tree mode returns owned ProcessInfo, so we collect refs differently
-        // We'll handle tree mode separately below
-        let filtered = sort.filtered_processes();
-        let total = sort.processes.len();
-        (filtered, total)
-    } else {
-        let filtered = sort.filtered_processes();
-        let total = sort.processes.len();
-        (filtered, total)
-    };
-
-    // For tree mode, get the tree data
     let tree_data;
-    let display_items: Vec<&ProcessInfo> = if sort.tree_mode {
+    let (display_items, total_count): (Vec<&ProcessInfo>, usize) = if sort.tree_mode {
         tree_data = sort.tree_view();
-        tree_data.iter().collect()
+        (tree_data.iter().collect(), sort.processes.len())
     } else {
-        items
+        (sort.filtered_processes(), sort.processes.len())
     };
 
     let visible_rows = area.height.saturating_sub(4) as usize;

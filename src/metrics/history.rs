@@ -23,24 +23,14 @@ impl History {
         self.data.push_back(value);
     }
 
-    pub fn as_slice_recent(&self, count: usize) -> Vec<f64> {
-        let len = self.data.len();
-        if count >= len {
-            self.data.iter().copied().collect()
-        } else {
-            self.data.iter().skip(len - count).copied().collect()
-        }
-    }
-
     pub fn max(&self) -> f64 {
         self.data.iter().copied().fold(0.0_f64, f64::max)
     }
 
     pub fn as_u64_vec(&self, count: usize) -> Vec<u64> {
-        self.as_slice_recent(count)
-            .iter()
-            .map(|v| *v as u64)
-            .collect()
+        let len = self.data.len();
+        let skip = len.saturating_sub(count);
+        self.data.iter().skip(skip).map(|&v| v as u64).collect()
     }
 }
 

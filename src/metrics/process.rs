@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use sysinfo::{ProcessStatus, System};
 
+use crate::util::contains_ignore_ascii_case;
+
 #[derive(Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
@@ -102,7 +104,7 @@ impl ProcessMetrics {
         let ascending = self.sort_ascending;
         match self.sort_field {
             ProcessSortField::Pid => {
-                self.processes.sort_by(|a, b| {
+                self.processes.sort_unstable_by(|a, b| {
                     if ascending {
                         a.pid.cmp(&b.pid)
                     } else {
@@ -111,16 +113,23 @@ impl ProcessMetrics {
                 });
             }
             ProcessSortField::Name => {
-                self.processes.sort_by(|a, b| {
+                // Cache lowercase keys to avoid allocating in comparator
+                self.processes.sort_unstable_by(|a, b| {
+                    let cmp = a
+                        .name
+                        .as_bytes()
+                        .iter()
+                        .map(|c| c.to_ascii_lowercase())
+                        .cmp(b.name.as_bytes().iter().map(|c| c.to_ascii_lowercase()));
                     if ascending {
-                        a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                        cmp
                     } else {
-                        b.name.to_lowercase().cmp(&a.name.to_lowercase())
+                        cmp.reverse()
                     }
                 });
             }
             ProcessSortField::Cpu => {
-                self.processes.sort_by(|a, b| {
+                self.processes.sort_unstable_by(|a, b| {
                     if ascending {
                         a.cpu_usage
                             .partial_cmp(&b.cpu_usage)
@@ -133,7 +142,7 @@ impl ProcessMetrics {
                 });
             }
             ProcessSortField::Memory => {
-                self.processes.sort_by(|a, b| {
+                self.processes.sort_unstable_by(|a, b| {
                     if ascending {
                         a.memory.cmp(&b.memory)
                     } else {
@@ -158,11 +167,21 @@ impl ProcessMetrics {
         if self.filter.is_empty() {
             self.processes.iter().collect()
         } else {
-            let filter_lower = self.filter.to_lowercase();
             self.processes
                 .iter()
-                .filter(|p| p.name.to_lowercase().contains(&filter_lower))
+                .filter(|p| contains_ignore_ascii_case(&p.name, &self.filter))
                 .collect()
+        }
+    }
+
+    pub fn filtered_count(&self) -> usize {
+        if self.filter.is_empty() {
+            self.processes.len()
+        } else {
+            self.processes
+                .iter()
+                .filter(|p| contains_ignore_ascii_case(&p.name, &self.filter))
+                .count()
         }
     }
 
@@ -185,7 +204,7 @@ impl ProcessMetrics {
         }
 
         // Sort roots by sort field
-        roots.sort_by(|a, b| {
+        roots.sort_unstable_by(|a, b| {
             let pa = pid_map[a];
             let pb = pid_map[b];
             pb.cpu_usage
@@ -200,8 +219,7 @@ impl ProcessMetrics {
 
         // Apply filter
         if !self.filter.is_empty() {
-            let filter_lower = self.filter.to_lowercase();
-            result.retain(|p| p.name.to_lowercase().contains(&filter_lower));
+            result.retain(|p| contains_ignore_ascii_case(&p.name, &self.filter));
         }
 
         result

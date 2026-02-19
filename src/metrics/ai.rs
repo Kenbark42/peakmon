@@ -1,6 +1,6 @@
 use super::history::History;
 use super::process::ProcessInfo;
-use crate::util::format_bytes;
+use crate::util::{contains_ignore_ascii_case, format_bytes};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -442,28 +442,32 @@ impl AiMetrics {
     }
 
     fn detect_services(&mut self, processes: &[ProcessInfo]) {
-        self.services = SERVICE_PATTERNS
-            .iter()
-            .map(|sp| {
-                let matched = processes.iter().find(|p| {
-                    let name_lower = p.name.to_lowercase();
-                    sp.process_patterns
-                        .iter()
-                        .any(|pat| name_lower.contains(&pat.to_lowercase()))
-                });
+        // Resize services vec to match patterns (reuse allocation)
+        self.services
+            .resize_with(SERVICE_PATTERNS.len(), || AiService {
+                name: "",
+                detected: false,
+                version: None,
+                pid: None,
+            });
 
-                AiService {
-                    name: sp.name,
-                    detected: matched.is_some(),
-                    version: if sp.name == "Ollama" {
-                        self.ollama_version.clone()
-                    } else {
-                        None
-                    },
-                    pid: matched.map(|p| p.pid),
-                }
-            })
-            .collect();
+        for (i, sp) in SERVICE_PATTERNS.iter().enumerate() {
+            // Patterns are already lowercase, so use case-insensitive search
+            let matched = processes.iter().find(|p| {
+                sp.process_patterns
+                    .iter()
+                    .any(|pat| contains_ignore_ascii_case(&p.name, pat))
+            });
+
+            self.services[i].name = sp.name;
+            self.services[i].detected = matched.is_some();
+            self.services[i].version = if sp.name == "Ollama" {
+                self.ollama_version.clone()
+            } else {
+                None
+            };
+            self.services[i].pid = matched.map(|p| p.pid);
+        }
 
         self.ollama_available = self
             .services
@@ -472,18 +476,19 @@ impl AiMetrics {
     }
 
     fn filter_ai_processes(&mut self, processes: &[ProcessInfo]) {
-        self.ai_processes = processes
-            .iter()
-            .filter(|p| {
-                let name_lower = p.name.to_lowercase();
-                AI_PROCESS_PATTERNS
-                    .iter()
-                    .any(|pat| name_lower.contains(pat))
-            })
-            .cloned()
-            .collect();
+        self.ai_processes.clear();
+        self.ai_processes.extend(
+            processes
+                .iter()
+                .filter(|p| {
+                    AI_PROCESS_PATTERNS
+                        .iter()
+                        .any(|pat| contains_ignore_ascii_case(&p.name, pat))
+                })
+                .cloned(),
+        );
 
-        self.ai_processes.sort_by(|a, b| {
+        self.ai_processes.sort_unstable_by(|a, b| {
             b.cpu_usage
                 .partial_cmp(&a.cpu_usage)
                 .unwrap_or(std::cmp::Ordering::Equal)

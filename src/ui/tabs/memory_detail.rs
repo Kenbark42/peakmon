@@ -1,4 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
+use ratatui::text::Line;
+use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 use crate::metrics::MetricsCollector;
@@ -11,6 +14,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // RAM gauge
+            Constraint::Length(3), // RAM breakdown info
             Constraint::Length(7), // RAM sparkline
             Constraint::Length(3), // Swap gauge
             Constraint::Min(7),    // Swap sparkline
@@ -32,11 +36,25 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
         &ram_label,
     );
 
+    // RAM breakdown: App / Wired / Compressed
+    let breakdown = format!(
+        " App: {}  Wired: {}  Compressed: {}",
+        format_bytes(metrics.memory.app_memory),
+        format_bytes(metrics.memory.wired),
+        format_bytes(metrics.memory.compressed),
+    );
+    let info_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme::border_style())
+        .style(Style::default().bg(theme::BASE));
+    let info_para = Paragraph::new(Line::styled(breakdown, theme::value_style())).block(info_block);
+    frame.render_widget(info_para, chunks[1]);
+
     // RAM history sparkline
     let ram_data = metrics.memory.ram_history.as_u64_vec(area.width as usize);
     sparkline_panel::render(
         frame,
-        chunks[1],
+        chunks[2],
         "RAM History",
         &ram_data,
         Some(100),
@@ -53,7 +71,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     );
     metric_gauge::render(
         frame,
-        chunks[2],
+        chunks[3],
         "Swap",
         metrics.memory.swap_percent,
         &swap_label,
@@ -63,7 +81,7 @@ pub fn render(frame: &mut Frame, area: Rect, metrics: &MetricsCollector) {
     let swap_data = metrics.memory.swap_history.as_u64_vec(area.width as usize);
     sparkline_panel::render(
         frame,
-        chunks[3],
+        chunks[4],
         "Swap History",
         &swap_data,
         Some(100),
